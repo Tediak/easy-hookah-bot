@@ -28,5 +28,5 @@ case object StartOrdering
 case class OrderCreated(id: Long)
 
 object UserActor {
-  def props(nickname: String, dbActor: ActorRef) = Props(new UserActor(nickname))
+  def props(nickname: String, dbActor: ActorRef) = Props(new UserActor(nickname, dbActor))
 }
