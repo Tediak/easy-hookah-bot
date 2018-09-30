@@ -6,7 +6,7 @@ import model.Visit
 import slick.jdbc.PostgresProfile.api._
 import slick.lifted.Tag
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 class VisitTable(tag: Tag) extends Table[Visit](tag, "visits"){
   val id = column[Long]("id", O.PrimaryKey, O.AutoInc)
