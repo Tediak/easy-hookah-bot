@@ -51,6 +51,16 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
       reply("Введите пароль, чтобы авторизироваться", replyMarkup = Some(ForceReply()))
   }
 
+  onCommand ("/logout")
+  {
+    implicit msg =>
+      msg.from.foreach{
+        from =>dbActor ! Logout (from.username.get,msg)
+      }
+
+  }
+
+
   //  onCallbackWithTag("order"){
   //      implicit cbq =>
   //        for (msg <- cbq.message) reply("Для начала, выберем вкус"
@@ -84,8 +94,8 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
           case Some ("Введите пароль, чтобы авторизироваться") => msg.from.foreach{
             from =>
               dbActor ! VerifyPassword (from.username.get, msg)
-
           }
+
           case _ => reply("Извините, не понимаю вас")
         }
     }
@@ -113,6 +123,11 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
         reply("Вы авторизованы\nНе забудьте выйти из аккаунта с помощью комманды /logout")(msg)
       }
       else reply ("Пароль неверен")(msg)
+    case BotLogout (msg,isLogout : Boolean) =>
+      if (isLogout)
+        reply ("Вы успешно вышли из аккаунта")(msg)
+      else
+        reply ("Вы еще не авторизовались")(msg)
     case _ => Unit
   }
 
@@ -126,7 +141,7 @@ case class IsEmployeeAuthorized (msg : Message, list : List[String] )
 
 case class DenyOrdering(msg: Message, because: String)
 case class AcceptOrdering(msg: Message)
-
+case class BotLogout (msg: Message, isLogout : Boolean)
 case class EmptyHookahSet(msg: Message)
 case class HookahSet(set: Set[String], msg: Message)
 

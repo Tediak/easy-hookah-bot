@@ -37,6 +37,6 @@ class AccountRepository(db: Database) {
   def getById(accountId: Long): Future[Option[Account]] =
     db.run(accountTable.filter(_.id === accountId).result.headOption)
 
-  def updateByUser(login : String, password: String, isAuthorized : Boolean) =
-    db.run(accountTable.filter(x=> x.login === login && x.password === password).map(x=> x.isLogined).update(true))
+  def updateByUser(login : String, isAuthorized : Boolean) =
+    db.run(accountTable.filter(x=> x.login === login).map(x=> x.isLogined).update(isAuthorized))
   }

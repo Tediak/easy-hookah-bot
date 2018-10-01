@@ -35,7 +35,6 @@ class DatabaseActor(db: Database) extends Actor {
       if account.password === password
 
     }yield account.password).result).map(_.toList)
-
   }
 
 
@@ -59,7 +58,7 @@ class DatabaseActor(db: Database) extends Actor {
       authorizeEmployee(username, password.text.getOrElse(" ")) onComplete {
         case Success (list) =>
           if (list.nonEmpty)
-            accountRepository.updateByUser(username, list.head, true) onComplete {
+            accountRepository.updateByUser(username, true) onComplete {
               case Success (_) => send ! IsEmployeeAuthorized (password, list)
               case Failure (_) => send ! IsEmployeeAuthorized (password, Nil)
             }
@@ -67,6 +66,14 @@ class DatabaseActor(db: Database) extends Actor {
             send ! IsEmployeeAuthorized (password, Nil)
         case _ => send ! IsEmployeeAuthorized (password, Nil)
       }
+    case Logout (username : String,msg) =>
+      val send = sender()
+      accountRepository.updateByUser(username,  false) onComplete {
+        case Success (_) => send ! BotLogout (msg, true)
+          //TODO
+//        case Failure (_) =>
+      }
+
 
 
 
@@ -78,6 +85,7 @@ case class CreateOrder(msg: Message)
 
 case class CheckHookahs(id: Int, msg: Message)
 case class VerifyPassword (username: String, password : Message)
+case class Logout (username : String, msg: Message)
 
 case class SetTaste(taste: String)
 case class SetPower(power: String)
