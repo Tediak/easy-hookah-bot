@@ -5,6 +5,7 @@ import model._
 import slick.jdbc.PostgresProfile.api._
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Success, Failure}
 
 class DatabaseActor(db: Database) extends Actor {
 
@@ -32,11 +33,14 @@ class DatabaseActor(db: Database) extends Actor {
     case CheckHookahs(id, msg) =>
       val hookahSet = getHookahsforUser(id.toLong)
       val send = sender()
-      hookahSet onSuccess {
-        case set =>
-        if(set.isEmpty)
+      hookahSet onComplete {
+        case Success(set) =>
+          if(set.isEmpty)
+            send ! EmptyHookahSet(msg)
+          else send ! HookahSet(set, msg)
+
+        case Failure(_) =>
           send ! EmptyHookahSet(msg)
-        else send ! HookahSet(set, msg)
       }
     case CreateOrder(msg) =>
     case _ => Unit
