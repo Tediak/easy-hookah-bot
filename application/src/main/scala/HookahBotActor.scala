@@ -1,5 +1,7 @@
 import akka.actor.{Actor, Props}
 import com.bot4s.telegram.methods.DeleteMessage
+
+import scala.util.Try
 //import info.mukel.telegrambot4s.api.declarative.{Callbacks, Commands}
 //import info.mukel.telegrambot4s.api.{Polling, TelegramBot}
 //import info.mukel.telegrambot4s.models.{ForceReply, KeyboardButton, ReplyKeyboardMarkup}
@@ -44,17 +46,23 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
         replyMarkup = startMarkup)(msg)
   }
 
-//  onCallbackWithTag("order"){
-//      implicit cbq =>
-//        for (msg <- cbq.message) reply("Для начала, выберем вкус"
-//        , replyMarkup = Some(InlineKeyboardMarkup.singleColumn(
-//            Seq(
-//              InlineKeyboardButton.callbackData("Кислый", cbq.data + "t1"),
-//              InlineKeyboardButton.callbackData("Сладкий", cbq.data + "t2"),
-//              InlineKeyboardButton.callbackData("Кислосладкий :)", cbq.data + "t3")
-//            ))))(msg)
-//        ackCallback(Some("Ураааа"))
-//    }
+  onCommand ("/login") {
+    implicit msg =>
+      reply("Введите пароль, чтобы авторизироваться", replyMarkup = Some(ForceReply()))
+
+  }
+
+  //  onCallbackWithTag("order"){
+  //      implicit cbq =>
+  //        for (msg <- cbq.message) reply("Для начала, выберем вкус"
+  //        , replyMarkup = Some(InlineKeyboardMarkup.singleColumn(
+  //            Seq(
+  //              InlineKeyboardButton.callbackData("Кислый", cbq.data + "t1"),
+  //              InlineKeyboardButton.callbackData("Сладкий", cbq.data + "t2"),
+  //              InlineKeyboardButton.callbackData("Кислосладкий :)", cbq.data + "t3")
+  //            ))))(msg)
+  //        ackCallback(Some("Ураааа"))
+  //    }
 
   onMessage{ implicit msg =>
     using(_.text) {
@@ -74,6 +82,11 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
           case Some("Отдельные пожелания") => reply("Ваш заказ принят!")
           case Some("Введите промокод, который сказал вам кальянщик") =>
             reply("Спасибо!!!")
+          case Some ("Введите пароль, чтобы авторизироваться") => msg.from.foreach{
+            from =>
+              dbActor ! VerifyPassword (from.username.get, msg)
+
+          }
           case _ => reply("Извините, не понимаю вас")
         }
     }
@@ -92,10 +105,14 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
       reply("К сожалению, вы еще не пользовались услугами нашего бота. " +
         "Как только вы посетите одну из кальянных, вы сможете делать в ней заказы.")(msg)
     case HookahSet(set, msg) =>
-          reply("Выберите кальянную из списка: ",
-            replyMarkup = Some(InlineKeyboardMarkup.singleColumn(
-              set.map(s => InlineKeyboardButton.callbackData(s, orderTag(s))).toSeq
-            )))(msg)
+      reply("Выберите кальянную из списка: ",
+        replyMarkup = Some(InlineKeyboardMarkup.singleColumn(
+          set.map(s => InlineKeyboardButton.callbackData(s, orderTag(s))).toSeq
+        )))(msg)
+    case IsEmployeeAuthorized (msg, list) =>
+      if (list.nonEmpty)
+        reply ("Вы авторизованы")(msg)
+      else reply ("Пароль неверен")(msg)
     case _ => Unit
   }
 
@@ -104,6 +121,8 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
 
   }
 }
+
+case class IsEmployeeAuthorized (msg : Message, list : List[String] )
 
 case class DenyOrdering(msg: Message, because: String)
 case class AcceptOrdering(msg: Message)
