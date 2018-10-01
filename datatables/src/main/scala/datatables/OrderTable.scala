@@ -12,8 +12,8 @@ class OrderTable(tag: Tag) extends Table[Order](tag, "orders"){
   val id = column[Long]("id", O.PrimaryKey, O.AutoInc)
   val guestId = column[Long]("guest_id")
   val hookahId = column[Long]("hookah_id")
-  val hookahTaste = column[String]("hookah_taste")
-  val hookahPower = column[String]("hookah_power")
+  val hookahTaste = column[Option[String]]("hookah_taste")
+  val hookahPower = column[Option[String]]("hookah_power")
   val time = column[LocalDateTime]("time")
   val comment = column[Option[String]]("comment")
 
