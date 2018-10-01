@@ -33,7 +33,9 @@ class DatabaseActor(db: Database) extends Actor {
       account <- accountTable
       if account.login === login
       if account.password === password
-    } yield account.password).result).map(_.toList)
+
+    }yield account.password).result).map(_.toList)
+
   }
 
 
@@ -57,7 +59,10 @@ class DatabaseActor(db: Database) extends Actor {
       authorizeEmployee(username, password.text.getOrElse(" ")) onComplete {
         case Success (list) =>
           if (list.nonEmpty)
-            send ! IsEmployeeAuthorized (password, list)
+            accountRepository.updateByUser(username, list.head, true) onComplete {
+              case Success (_) => send ! IsEmployeeAuthorized (password, list)
+              case Failure (_) => send ! IsEmployeeAuthorized (password, Nil)
+            }
           else
             send ! IsEmployeeAuthorized (password, Nil)
         case _ => send ! IsEmployeeAuthorized (password, Nil)

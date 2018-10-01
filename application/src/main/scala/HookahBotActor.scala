@@ -49,7 +49,6 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
   onCommand ("/login") {
     implicit msg =>
       reply("Введите пароль, чтобы авторизироваться", replyMarkup = Some(ForceReply()))
-
   }
 
   //  onCallbackWithTag("order"){
@@ -110,8 +109,9 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
           set.map(s => InlineKeyboardButton.callbackData(s, orderTag(s))).toSeq
         )))(msg)
     case IsEmployeeAuthorized (msg, list) =>
-      if (list.nonEmpty)
-        reply ("Вы авторизованы")(msg)
+      if (list.nonEmpty) {
+        reply("Вы авторизованы\nНе забудьте выйти из аккаунта с помощью комманды /logout")(msg)
+      }
       else reply ("Пароль неверен")(msg)
     case _ => Unit
   }
