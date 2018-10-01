@@ -34,8 +34,8 @@ package object model {
   case class Order(
                     guestId: Long,
                     hookahId: Long,
-                    hookahTaste: String,
-                    hookahPower: String,
+                    hookahTaste: Option[String],
+                    hookahPower: Option[String],
                     time: LocalDateTime,
                     comment: Option[String] = None,
                     id: Long = 0L

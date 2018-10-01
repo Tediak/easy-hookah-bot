@@ -6,6 +6,7 @@ import slick.jdbc.PostgresProfile.api._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure}
 
 class DatabaseActor(db: Database) extends Actor {
 
@@ -26,7 +27,7 @@ class DatabaseActor(db: Database) extends Actor {
   def getHookahsforUser(id: Long)(implicit ec: ExecutionContext) =
     db.run((for {
       hookah <- hookahTable
-    } yield hookah.name).result).map(_.toSet)
+    } yield (hookah.id, hookah.name)).result).map(_.toSet)
 
   def authorizeEmployee (login : String, password : String) (implicit ec : ExecutionContext) = {
     db.run ((for {
@@ -46,6 +47,9 @@ class DatabaseActor(db: Database) extends Actor {
       hookahSet onComplete {
         case Success(set) =>
           if (set.isEmpty)
+            send ! EmptyHookahSet(msg)
+          else send ! HookahSet(set, msg)
+          if(set.isEmpty)
             send ! EmptyHookahSet(msg)
           else send ! HookahSet(set, msg)
 
@@ -80,6 +84,7 @@ class DatabaseActor(db: Database) extends Actor {
     case _ => Unit
   }
 }
+
 
 case class CreateOrder(msg: Message)
 
