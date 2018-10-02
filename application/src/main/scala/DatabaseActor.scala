@@ -19,9 +19,13 @@ class DatabaseActor(db: Database) extends Actor {
   val visitRepository = new VisitRepository(db)
 
   def orderTable = OrderTable.table
+
   def visitTable = VisitTable.table
+
   def guestTable = GuestTable.table
+
   def hookahTable = HookahTable.table
+
   def accountTable = AccountTable.table
 
   def getHookahsforUser(id: Long)(implicit ec: ExecutionContext) =
@@ -29,21 +33,20 @@ class DatabaseActor(db: Database) extends Actor {
       hookah <- hookahTable
     } yield (hookah.id, hookah.name)).result).map(_.toSet)
 
-  def authorizeEmployee (login : String, password : String) (implicit ec : ExecutionContext) = {
-    db.run ((for {
+  def authorizeEmployee(login: String, password: String)(implicit ec: ExecutionContext) = {
+    db.run((for {
       account <- accountTable
       if account.login === login
       if account.password === password
 
-    }yield account.password).result).map(_.toList)
+    } yield account.password).result).map(_.toList)
   }
 
-  def accountIsAlreadyAuthorized (login : String) (implicit ec : ExecutionContext) =
-  {
-    db.run ((for {
+  def accountIsAlreadyAuthorized(login: String)(implicit ec: ExecutionContext) = {
+    db.run((for {
       account <- accountTable
       if account.login === login
-    }yield account.isLogined).result).map(_.toList.head)
+    } yield account.isLogined).result).map(_.toList.head)
   }
 
   override def receive: Receive = {
@@ -55,7 +58,7 @@ class DatabaseActor(db: Database) extends Actor {
           if (set.isEmpty)
             send ! EmptyHookahSet(msg)
           else send ! HookahSet(set, msg)
-          if(set.isEmpty)
+          if (set.isEmpty)
             send ! EmptyHookahSet(msg)
           else send ! HookahSet(set, msg)
 
@@ -63,52 +66,69 @@ class DatabaseActor(db: Database) extends Actor {
           send ! EmptyHookahSet(msg)
       }
     }
-    case VerifyPassword (username, password) =>
+    case VerifyPassword(username, password) =>
       val send = sender()
       accountIsAlreadyAuthorized(username) onComplete {
-        case Success (value) =>
+        case Success(value) =>
           if (!value)
             authorizeEmployee(username, password.text.getOrElse(" ")) onComplete {
-              case Success (list) =>
+              case Success(list) =>
                 if (list.nonEmpty)
                   accountRepository.updateByUser(username, true) onComplete {
                     case Success(_) => send ! IsEmployeeAuthorized(password, list)
                     case Failure(_) => send ! IsEmployeeAuthorized(password, Nil)
                   }
                 else
-                  send ! IsEmployeeAuthorized (password, Nil)
+                  send ! IsEmployeeAuthorized(password, Nil)
             }
           else
             send ! EmployeeIsAlreadyAuthorized(password)
-        case _ => send ! IsEmployeeAuthorized (password, Nil)
+        case _ => send ! IsEmployeeAuthorized(password, Nil)
       }
-    case Logout (username : String,msg) =>
+    case Logout(username: String, msg) =>
       val send = sender()
       accountIsAlreadyAuthorized(username) onComplete {
-        case Success (value) =>
+        case Success(value) =>
           if (value)
-            accountRepository.updateByUser(username,  false) onComplete {
+            accountRepository.updateByUser(username, false) onComplete {
               case Success(_) => send ! BotLogout(msg, true)
               case Failure(_) => send ! BotLogout(msg, false)
             }
           else
-            send ! EmployeeIsNotAuthorizedYet (msg)
+            send ! EmployeeIsNotAuthorizedYet(msg)
       }
-    case _ => Unit
+
+    case IsAlreadyAuthorized(username,msg) =>
+      val send = sender()
+      accountIsAlreadyAuthorized(username) onComplete {
+        case Success(value) =>
+          if (!value)
+            send ! EmployeeForceAuthorize (msg)
+        else
+            send ! EmployeeIsAlreadyAuthorized(msg)
+        case _ => Unit
+      }
   }
 }
 
 
-case class CreateOrder(msg: Message)
+  case class CreateOrder(msg: Message)
 
-case class CheckHookahs(id: Int, msg: Message)
-case class VerifyPassword (username: String, password : Message)
-case class Logout (username : String, msg: Message)
+  case class IsAlreadyAuthorized(username: String, msg : Message)
 
-case class SetTaste(taste: String)
-case class SetPower(power: String)
+  case class CheckHookahs(id: Int, msg: Message)
+
+  case class VerifyPassword(username: String, password: Message)
+
+  case class Logout(username: String, msg: Message)
+
+  case class SetTaste(taste: String)
+
+  case class SetPower(power: String)
 
 
-object DatabaseActor {
-  def props = Props(new DatabaseActor(Database.forConfig("postgres")))
-}
+  object DatabaseActor {
+    def props = Props(new DatabaseActor(Database.forConfig("postgres")))
+  }
+
+
