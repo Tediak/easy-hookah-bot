@@ -38,7 +38,13 @@ class DatabaseActor(db: Database) extends Actor {
     }yield account.password).result).map(_.toList)
   }
 
-
+  def accountIsAlreadyAuthorized (login : String) (implicit ec : ExecutionContext) =
+  {
+    db.run ((for {
+      account <- accountTable
+      if account.login === login
+    }yield account.isLogined).result).map(_.toList.head)
+  }
 
   override def receive: Receive = {
     case CheckHookahs(id, msg) => {
@@ -59,28 +65,35 @@ class DatabaseActor(db: Database) extends Actor {
     }
     case VerifyPassword (username, password) =>
       val send = sender()
-      authorizeEmployee(username, password.text.getOrElse(" ")) onComplete {
-        case Success (list) =>
-          if (list.nonEmpty)
-            accountRepository.updateByUser(username, true) onComplete {
-              case Success (_) => send ! IsEmployeeAuthorized (password, list)
-              case Failure (_) => send ! IsEmployeeAuthorized (password, Nil)
+      accountIsAlreadyAuthorized(username) onComplete {
+        case Success (value) =>
+          if (!value)
+            authorizeEmployee(username, password.text.getOrElse(" ")) onComplete {
+              case Success (list) =>
+                if (list.nonEmpty)
+                  accountRepository.updateByUser(username, true) onComplete {
+                    case Success(_) => send ! IsEmployeeAuthorized(password, list)
+                    case Failure(_) => send ! IsEmployeeAuthorized(password, Nil)
+                  }
+                else
+                  send ! IsEmployeeAuthorized (password, Nil)
             }
           else
-            send ! IsEmployeeAuthorized (password, Nil)
+            send ! EmployeeIsAlreadyAuthorized(password)
         case _ => send ! IsEmployeeAuthorized (password, Nil)
       }
     case Logout (username : String,msg) =>
       val send = sender()
-      accountRepository.updateByUser(username,  false) onComplete {
-        case Success (_) => send ! BotLogout (msg, true)
-          //TODO
-//        case Failure (_) =>
+      accountIsAlreadyAuthorized(username) onComplete {
+        case Success (value) =>
+          if (value)
+            accountRepository.updateByUser(username,  false) onComplete {
+              case Success(_) => send ! BotLogout(msg, true)
+              case Failure(_) => send ! BotLogout(msg, false)
+            }
+          else
+            send ! EmployeeIsNotAuthorizedYet (msg)
       }
-
-
-
-
     case _ => Unit
   }
 }

@@ -162,6 +162,10 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
         reply ("Вы успешно вышли из аккаунта")(msg)
       else
         reply ("Вы еще не авторизовались")(msg)
+    case EmployeeIsAlreadyAuthorized (msg) =>
+      reply ("Вы уже авторизованы\nВы можете выйти из аккаунта с помощью комманды /logout ")(msg)
+    case EmployeeIsNotAuthorizedYet (msg) =>
+      reply ("Вы еще не авторизовались")(msg)
     case _ => Unit
   }
 
@@ -254,6 +258,10 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
 //    }
 //  }
 }
+
+case class EmployeeIsNotAuthorizedYet (msg: Message)
+
+case class EmployeeIsAlreadyAuthorized (msg : Message)
 
 case class IsEmployeeAuthorized (msg : Message, list : List[String] )
 
