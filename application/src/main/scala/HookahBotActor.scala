@@ -22,6 +22,7 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
   val db = Database.forConfig("postgres")
   val dbActor = context.actorOf(DatabaseActor.props, "tediak_database_actor")
 
+  // unique actor for per user
   def userActor(id: Int) =
     context.child(id.toString).getOrElse {
       context.actorOf(UserActor.props(id, dbActor), id.toString)
@@ -42,8 +43,10 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
   def greetings(name: String) = "Привет, " + name +
     "! Это бот-кальянщик, который упростит тебе твою жизнь :)"
 
+  // message for start menu
   val start = "Нажмите любую из кнопок, чтобы сделать новый заказ."
 
+  // two main buttons for starting using bot
   val startMarkup = Some(ReplyKeyboardMarkup.singleRow(
     Seq(
       KeyboardButton.text("Заказать кальян"),
@@ -52,30 +55,95 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
     resizeKeyboard = Some(true)
   ))
 
+  // buttons with three main tastes of hookah
   val tasteMarkup = InlineKeyboardMarkup.singleColumn(Seq(
     InlineKeyboardButton.callbackData("Кислый", tasteTag("Кислый")),
     InlineKeyboardButton.callbackData("Сладкий", tasteTag("Сладкий")),
     InlineKeyboardButton.callbackData("Кисло-сладкий", tasteTag("Кисло-сладкий"))
   ))
 
+  // buttons with power of hookah
   val powerMarkup = InlineKeyboardMarkup.singleColumn(Seq(
     InlineKeyboardButton.callbackData("Слабый", powerTag("Слабый")),
     InlineKeyboardButton.callbackData("Средний", powerTag("Средний")),
     InlineKeyboardButton.callbackData("Сильный", powerTag("Сильный"))
   ))
 
-  val commentMarkup = InlineKeyboardMarkup.singleButton(
-    InlineKeyboardButton.callbackData("Отдельные пожелания", commentTag("add")))
+  // optional comment button
+  val commentMarkup = InlineKeyboardMarkup.singleColumn(Seq(
+    InlineKeyboardButton.callbackData("Добавить комментарий", commentTag("add")),
+    InlineKeyboardButton.callbackData("Нет, спасибо", commentTag("not_need"))
+  ))
 
-  val Markup = InlineKeyboardMarkup.singleRow(Seq(
+  // finishing an order
+  val finishMarkup = InlineKeyboardMarkup.singleRow(Seq(
     InlineKeyboardButton.callbackData("Отправить", finishTag("accept")),
     InlineKeyboardButton.callbackData("Отменить", finishTag("deny")))
   )
 
-  def orderMenu(msg: Message) = {
-    reply("Вкус", replyMarkup = Some(tasteMarkup))(msg)
-    reply("Жёсткость", replyMarkup = Some(powerMarkup))(msg)
-    reply("Отдельные пожелания", replyMarkup = Some(commentMarkup))(msg)
+  def startOrdering(msg: Message) =
+    reply("Для начала, выберем приблизительный вкус кальяна:",
+      replyMarkup = Some(tasteMarkup))(msg)
+
+  // after pressing on the taste button:
+  onCallbackWithTag(taste) { implicit cbq =>
+    cbq.message.foreach { implicit msg =>
+      userActor(cbq.from.id) ! UpdateTaste(cbq.data)
+      request(EditMessageText(
+        Some(msg.chat.id),
+        Some(msg.messageId),
+        text = "Вкус: " + cbq.data.getOrElse("")))
+      reply("Теперь выберем жёсткость:",
+        replyMarkup = Some(powerMarkup))
+    }
+  }
+
+  // ... power button:
+  onCallbackWithTag(power) { implicit cbq =>
+    cbq.message.foreach { implicit msg =>
+      userActor(cbq.from.id) ! UpdatePower(cbq.data)
+      request(EditMessageText(
+        Some(msg.chat.id),
+        Some(msg.messageId),
+        text = "Жесткость: " + cbq.data.getOrElse("")))
+      reply("Вы можете добавить необязательный комментарий с особыми пожеланиями :)",
+        replyMarkup = Some(commentMarkup))
+    }
+  }
+
+  // ... comment button
+  onCallbackWithTag(comment) { implicit cbq =>
+    cbq.data match {
+      case Some("add") =>
+        cbq.message.foreach { implicit msg =>
+          request(DeleteMessage(msg.chat.id, msg.messageId))
+          reply("Напишите комментарий в ответ на это сообщение",
+            replyMarkup = Some(ForceReply()))
+        }
+      case Some("not_need") =>
+        cbq.message.foreach { implicit msg =>
+          request(DeleteMessage(msg.chat.id, msg.messageId))
+          reply("Завершите заказ, или отмените, если что-то не так:",
+            replyMarkup = Some(finishMarkup))
+        }
+    }
+  }
+
+  onCallbackWithTag(finish) { implicit cbq =>
+    cbq.data match {
+      case Some("accept") =>
+        cbq.message.foreach{ msg =>
+          request(DeleteMessage(msg.chat.id, msg.messageId))
+          reply("Супер! Ваш заказ был отправлен кальянщику. Ожидайте сообщения...")(msg)
+          userActor(cbq.from.id) ! FinishOrdering(msg)
+        }
+      case Some("deny") =>
+        cbq.message.foreach{ msg =>
+          userActor(cbq.from.id) ! CancelOrdering(msg)
+          request(DeleteMessage(msg.chat.id, msg.messageId))
+          reply("Ваш заказ был успешно отменен.")(msg)
+        }
+    }
   }
 
   onCommand("/start") {
@@ -118,12 +186,8 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
           case Some("Напишите комментарий в ответ на это сообщение") =>
             userActor(msg.from.map(_.id).getOrElse(0)) ! UpdateComment(msg.text)
             request(DeleteMessage(msg.chat.id, msg.replyToMessage.map(_.messageId).getOrElse(0)))
-            reply("Ваш комментарий принят", replyMarkup = Some(
-              InlineKeyboardMarkup.singleColumn(Seq(
-                InlineKeyboardButton.callbackData("Изменить комментарий", commentTag("change")),
-                InlineKeyboardButton.callbackData("Удалить комментарий", commentTag("delete"))
-              ))
-            ))
+            reply("Комментарий принят. Завершите заказ, или отмените, если что-то не так:",
+              replyMarkup = Some(finishMarkup))
           case Some("Введите промокод, который сказал вам кальянщик") =>
             reply("Спасибо!!!")
           case Some ("Введите пароль, чтобы авторизироваться") => msg.from.foreach{
@@ -144,13 +208,13 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
     case DenyOrdering(msg, because) =>
       reply("Извините, не могу принять ваш заказ, потому что" + because)(msg)
     case AcceptOrdering(msg) =>
-      orderMenu(msg)
+      startOrdering(msg)
       request(DeleteMessage(msg.chat.id, msg.messageId))
     case EmptyHookahSet(msg) =>
       reply("К сожалению, вы еще не пользовались услугами нашего бота. " +
         "Как только вы посетите одну из кальянных, вы сможете делать в ней заказы.")(msg)
     case HookahSet(set, msg) =>
-      reply("Выберите кальянную из списка: ",
+      reply("Выберите из списка: ",
         replyMarkup = Some(InlineKeyboardMarkup.singleColumn(
           set.map(s => InlineKeyboardButton.callbackData(s._2, orderTag(s._1.toString))).toSeq
         )))(msg)
@@ -174,93 +238,11 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
   }
 
   onCallbackWithTag(order) { implicit cbq =>
+    println("Hello")
     println(cbq.data)
     val usrActor = userActor(cbq.from.id)
-    cbq.message.foreach { msg => usrActor ! StartOrdering(msg, cbq.data.map(_.toLong).getOrElse(0)) }
+    cbq.message.foreach { msg => usrActor ! StartOrdering(msg, cbq.data.map(_.toLong).getOrElse(0L)) }
   }
-
-  onCallbackWithTag(taste) { implicit cbq =>
-    cbq.data match {
-      case Some("cancel") =>
-        cbq.message.foreach { msg =>
-          request(EditMessageReplyMarkup(
-            Some(msg.chat.id),
-            Some(msg.messageId),
-            replyMarkup = Some(tasteMarkup)
-          ))
-        }
-      case _ =>
-        cbq.message.foreach { msg =>
-          userActor(cbq.from.id) ! UpdateTaste(cbq.data)
-          request(EditMessageText(
-            Some(msg.chat.id),
-            Some(msg.messageId),
-            text = "Вкус: " + cbq.data.getOrElse(""),
-            replyMarkup = Some(InlineKeyboardMarkup.singleButton(
-              InlineKeyboardButton.callbackData("Изменить", tasteTag("cancel"))
-            ))))
-        }
-    }
-  }
-
-  onCallbackWithTag(power) { implicit cbq =>
-    cbq.data match {
-      case Some("cancel") =>
-        cbq.message.foreach { msg =>
-          request(EditMessageReplyMarkup(
-            Some(msg.chat.id),
-            Some(msg.messageId),
-            replyMarkup = Some(powerMarkup)
-          ))
-        }
-      case _ =>
-        cbq.message.foreach { msg =>
-          userActor(cbq.from.id) ! UpdatePower(cbq.data)
-          request(EditMessageText(
-            Some(msg.chat.id),
-            Some(msg.messageId),
-            text = "Жесткость: " + cbq.data.getOrElse(""),
-            replyMarkup = Some(InlineKeyboardMarkup.singleButton(
-              InlineKeyboardButton.callbackData("Изменить", powerTag("cancel"))
-            ))))
-        }
-    }
-  }
-
-  onCallbackWithTag(comment) { implicit cbq =>
-    cbq.data match {
-      case Some("add") =>
-        cbq.message.foreach { implicit msg =>
-          request(DeleteMessage(msg.chat.id, msg.messageId))
-          reply("Напишите комментарий в ответ на это сообщение",
-            replyMarkup = Some(ForceReply()))
-        }
-      case Some("change") =>
-        cbq.message.foreach { implicit msg =>
-          request(DeleteMessage(msg.chat.id, msg.messageId))
-          reply("Напишите комментарий в ответ на это сообщение",
-            replyMarkup = Some(ForceReply()))
-        }
-      case Some("delete") =>
-        cbq.message.foreach { implicit msg =>
-          request(DeleteMessage(msg.chat.id, msg.messageId))
-          reply("Отдельные пожелания", replyMarkup = Some(commentMarkup))
-        }
-    }
-  }
-
-//  onCallbackWithTag(finish) { implicit cbq =>
-//    cbq.data match {
-//      case Some("accept") =>
-//        cbq.message.foreach{ msg =>
-//          userActor(cbq.from.id) ! FinishOrdering(msg)
-//        }
-//      case Some("deny") =>
-//        cbq.message.foreach{
-//          userActor(cbq.from.id) ! CancelOrdering(msg)
-//        }
-//    }
-//  }
 }
 
 case class EmployeeForceAuthorize (msg : Message)
@@ -277,10 +259,10 @@ case class DenyOrdering(msg: Message, because: String)
 
 case class AcceptOrdering(msg: Message)
 
-  case class EmptyHookahSet(msg: Message)
+case class EmptyHookahSet(msg: Message)
 
-  case class HookahSet(set: Set[(Long, String)], msg: Message)
+case class HookahSet(set: Set[(Long, String)], msg: Message)
 
-  object HookahBotActor {
-    def props(): Props = Props(new HookahBotActor())
-  }
+object HookahBotActor {
+  def props(): Props = Props(new HookahBotActor())
+}

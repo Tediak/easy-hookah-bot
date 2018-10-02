@@ -13,33 +13,36 @@ class UserActor(id: Int, dbActor: ActorRef) extends Actor {
   var hookahPower: Option[String] = None
   var comment: Option[String] = None
 
-  def finishOrdering() = { isFree = true }
+  def finishOrdering() = {
+    isFree = true
+  }
 
   def receive() = {
     case StartOrdering(msg, id) =>
-      if(isFree) {
+      if (isFree) {
         isFree = false
         hookahId = id
-//          Some(Order(
-//            msg.from.map(_.id).getOrElse(0).toLong,
-//            hookahId,
-//            None,
-//            None,
-//            LocalDateTime.ofInstant(Instant.ofEpochSecond(msg.date), TimeZone.getDefault.toZoneId)))
-          context.parent ! AcceptOrdering(msg) }
-        else
-          context.parent ! DenyOrdering(msg, "предыдущий заказ не ещё не закончен. " +
-            "Сделайте предыдущий заказ или отмените его с помощью /cancel")
+        //          Some(Order(
+        //            msg.from.map(_.id).getOrElse(0).toLong,
+        //            hookahId,
+        //            None,
+        //            None,
+        //            LocalDateTime.ofInstant(Instant.ofEpochSecond(msg.date), TimeZone.getDefault.toZoneId)))
+        context.parent ! AcceptOrdering(msg)
+      }
+      else
+        context.parent ! DenyOrdering(msg, "предыдущий заказ не ещё не закончен. " +
+          "Сделайте предыдущий заказ или отмените его с помощью /cancel")
     case UpdateTaste(newTaste) =>
       hookahTaste = newTaste
     case UpdatePower(newPower) =>
       hookahPower = newPower
     case UpdateComment(newComment) =>
       comment = newComment
-//    case FinishOrdering(msg) =>
-//      if(hookahTaste.isEmpty || hookahPower.isEmpty)
-//        context.parent ! DenyOrdering(msg, "вы не указали какой-то из пунктов (вкус или жёсткость). " +
-//          "Пересмотрите свой заказ, пожалуйста.")
+    //    case FinishOrdering(msg) =>
+    //      if(hookahTaste.isEmpty || hookahPower.isEmpty)
+    //        context.parent ! DenyOrdering(msg, "вы не указали какой-то из пунктов (вкус или жёсткость). " +
+    //          "Пересмотрите свой заказ, пожалуйста.")
     case CancelOrdering(msg) =>
       isFree = true
       hookahId = 0L

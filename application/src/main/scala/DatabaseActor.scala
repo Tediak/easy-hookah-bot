@@ -1,4 +1,4 @@
-import akka.actor.{Actor, Props, Status}
+import akka.actor.{Actor, Props}
 import com.bot4s.telegram.models.Message
 import datatables.{OrderTable, VisitTable, _}
 import model._
@@ -19,13 +19,9 @@ class DatabaseActor(db: Database) extends Actor {
   val visitRepository = new VisitRepository(db)
 
   def orderTable = OrderTable.table
-
   def visitTable = VisitTable.table
-
   def guestTable = GuestTable.table
-
   def hookahTable = HookahTable.table
-
   def accountTable = AccountTable.table
 
   def getHookahsforUser(id: Long)(implicit ec: ExecutionContext) =
@@ -55,10 +51,7 @@ class DatabaseActor(db: Database) extends Actor {
       val send = sender()
       hookahSet onComplete {
         case Success(set) =>
-          if (set.isEmpty)
-            send ! EmptyHookahSet(msg)
-          else send ! HookahSet(set, msg)
-          if (set.isEmpty)
+          if(set.isEmpty)
             send ! EmptyHookahSet(msg)
           else send ! HookahSet(set, msg)
 
@@ -83,6 +76,7 @@ class DatabaseActor(db: Database) extends Actor {
             }
           else
             send ! EmployeeIsAlreadyAuthorized(password)
+
         case _ => send ! IsEmployeeAuthorized(password, Nil)
       }
     case Logout(username: String, msg) =>
