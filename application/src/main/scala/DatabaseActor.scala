@@ -26,7 +26,7 @@ class DatabaseActor(db: Database) extends Actor {
   def getHookahsforUser(id: Long)(implicit ec: ExecutionContext) =
     db.run((for {
       hookah <- hookahTable
-    }yield hookah.name).result).map(_.toSet)
+    }yield (hookah.id, hookah.name)).result).map(_.toSet)
 
 
   override def receive: Receive = {
@@ -45,13 +45,12 @@ class DatabaseActor(db: Database) extends Actor {
     case _ => Unit
   }
 }
-
-
 case class CreateOrder(msg: Message)
 
 case class CheckHookahs(id: Int, msg: Message)
 
 case class SetTaste(taste: String)
+
 case class SetPower(power: String)
 
 object DatabaseActor {
