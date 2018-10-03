@@ -38,6 +38,8 @@ class UserActor(id: Int, dbActor: ActorRef) extends Actor {
       hookahTaste = newTaste
     case UpdatePower(newPower) =>
       hookahPower = newPower
+    case UpdateWhen(newWhen) =>
+      when = newWhen
     case UpdateComment(newComment) =>
       comment = newComment
     //    case FinishOrdering(msg) =>
@@ -60,6 +62,8 @@ case class StartOrdering(msg: Message, hookahId: Long)
 case class UpdateTaste(taste: Option[String])
 
 case class UpdatePower(power: Option[String])
+
+case class UpdateWhen(when: Option[String])
 
 case class UpdateComment(comment: Option[String])
 

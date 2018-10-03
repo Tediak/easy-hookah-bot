@@ -21,6 +21,7 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
   val client = new ScalajHttpClient("626944613:AAFOedBtg34Kl7g3NV1a4w7XeixM0AgIfg8")
   val db = Database.forConfig("postgres")
   val dbActor = context.actorOf(DatabaseActor.props, "tediak_database_actor")
+  val manager = context.actorOf(OrderManagerActor.props, "manager_actor")
 
   // unique actor for per user
   def userActor(id: Int) =
@@ -133,9 +134,19 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
     }
   }
 
-//  onCallbackWithTag(when) {
-//
-//  }
+  onCallbackWithTag(when) { implicit cbq =>
+    cbq.message.foreach { implicit msg =>
+      request(EditMessageText(
+        Some(msg.chat.id),
+        Some(msg.messageId),
+        text = "Через" + cbq.data.getOrElse("") + "минут",
+        replyMarkup = None
+      ))
+      userActor(cbq.from.id) ! UpdateWhen(cbq.data)
+      reply("По желанию, вы можете добавить дополнительный комментарий для кальянщика",
+        replyMarkup = Some(commentMarkup))
+    }
+  }
 
   // ... comment button
   onCallbackWithTag(comment) { implicit cbq =>
@@ -260,11 +271,16 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
       else
         reply ("Вы еще не авторизовались")(msg)
     case EmployeeIsAlreadyAuthorized (msg) =>
-      reply ("Вы уже авторизованы\nВы можете выйти из аккаунта с помощью комманды /logout ")(msg)
+      reply ("Вы успешно авторизированы!\nВыход из аккаунта - /logout ")(msg)
     case EmployeeIsNotAuthorizedYet (msg) =>
       reply ("Вы еще не авторизовались")(msg)
     case EmployeeForceAuthorize (msg) =>
       reply("Введите пароль, чтобы авторизироваться", replyMarkup = Some(ForceReply()))(msg)
+//    case SendOrderMessafge(msg) =>
+//      reply("Вам пришел заказ ... от ... ",
+//        replyMarkup = Some(InlineKeyboardMarkup.singleColumn(Seq(
+//          InlineKeyboardButton.callbackData()
+//        ))))
     case _ => Unit
   }
 }
