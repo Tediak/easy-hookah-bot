@@ -33,11 +33,13 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
   val power = "power"
   val comment = "comment"
   val finish = "finish"
+  val when = "when"
 
   val orderTag = prefixTag(order) _
   val tasteTag = prefixTag(taste) _
   val powerTag = prefixTag(power) _
   val commentTag = prefixTag(comment) _
+  val whenTag = prefixTag(when) _
   val finishTag = prefixTag(finish) _
 
   def greetings(name: String) = "Привет, " + name +
@@ -54,6 +56,16 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
     oneTimeKeyboard = Some(true),
     resizeKeyboard = Some(true)
   ))
+
+  /* START MENU */
+
+  onCommand("/start") {
+    implicit msg =>
+      reply(greetings(msg.from.map(_.firstName).getOrElse("Неизвестный")),
+        replyMarkup = startMarkup)(msg)
+  }
+
+  /* ORDERING */
 
   // buttons with three main tastes of hookah
   val tasteMarkup = InlineKeyboardMarkup.singleColumn(Seq(
@@ -75,11 +87,22 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
     InlineKeyboardButton.callbackData("Нет, спасибо", commentTag("not_need"))
   ))
 
+  val whenMarkup = InlineKeyboardMarkup.singleColumn(Seq(
+    InlineKeyboardButton.callbackData("15 минут", whenTag("15")),
+    InlineKeyboardButton.callbackData("30 минут", whenTag("30")),
+    InlineKeyboardButton.callbackData("45 минут", whenTag("45")),
+    InlineKeyboardButton.callbackData("Один час", whenTag("60"))
+  ))
+
   // finishing an order
   val finishMarkup = InlineKeyboardMarkup.singleRow(Seq(
     InlineKeyboardButton.callbackData("Отправить", finishTag("accept")),
-    InlineKeyboardButton.callbackData("Отменить", finishTag("deny")))
-  )
+    InlineKeyboardButton.callbackData("Отменить", finishTag("deny"))))
+
+  onCallbackWithTag(order) { implicit cbq =>
+    val usrActor = userActor(cbq.from.id)
+    cbq.message.foreach { msg => usrActor ! StartOrdering(msg, cbq.data.map(_.toLong).getOrElse(0L)) }
+  }
 
   def startOrdering(msg: Message) =
     reply("Для начала, выберем приблизительный вкус кальяна:",
@@ -106,10 +129,13 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
         Some(msg.chat.id),
         Some(msg.messageId),
         text = "Жесткость: " + cbq.data.getOrElse("")))
-      reply("Вы можете добавить необязательный комментарий с особыми пожеланиями :)",
-        replyMarkup = Some(commentMarkup))
+      reply("Через сколько примерно Вы будете?", replyMarkup = Some(whenMarkup))
     }
   }
+
+//  onCallbackWithTag(when) {
+//
+//  }
 
   // ... comment button
   onCallbackWithTag(comment) { implicit cbq =>
@@ -146,11 +172,7 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
     }
   }
 
-  onCommand("/start") {
-    implicit msg =>
-      reply(greetings(msg.from.map(_.firstName).getOrElse("Неизвестный")),
-        replyMarkup = startMarkup)(msg)
-  }
+  /* MESSAGE HANDLER */
 
   onCommand ("/login") {
     implicit msg =>
@@ -204,15 +226,21 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
     run()
   }
 
+  /* RECEIVE MESSAGES FROM OTHER ACTORS */
+
   override def receive: Receive = {
+    // from UserActor after starting ordering when previous order isn't completed, or other
     case DenyOrdering(msg, because) =>
       reply("Извините, не могу принять ваш заказ, потому что" + because)(msg)
+    // from UserActor when it can start making order
     case AcceptOrdering(msg) =>
       startOrdering(msg)
       request(DeleteMessage(msg.chat.id, msg.messageId))
+    // from DatabasActor, when user didn't use bot earlier
     case EmptyHookahSet(msg) =>
       reply("К сожалению, вы еще не пользовались услугами нашего бота. " +
         "Как только вы посетите одну из кальянных, вы сможете делать в ней заказы.")(msg)
+    // from DatabaseActor, set of hookahs in which HookahBot was used
     case HookahSet(set, msg) =>
       reply("Выберите из списка: ",
         replyMarkup = Some(InlineKeyboardMarkup.singleColumn(
@@ -220,7 +248,10 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
         )))(msg)
     case IsEmployeeAuthorized (msg, list) =>
       if (list.nonEmpty) {
-        reply("Вы авторизованы\nНе забудьте выйти из аккаунта с помощью комманды /logout")(msg)
+
+        reply("Вы авторизованы\n" +
+          "Кальянная: \n" +
+          "Не забудьте выйти из аккаунта с помощью комманды /logout")(msg)
       }
       else reply ("Пароль неверен")(msg)
     case BotLogout (msg,isLogout : Boolean) =>
@@ -235,13 +266,6 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
     case EmployeeForceAuthorize (msg) =>
       reply("Введите пароль, чтобы авторизироваться", replyMarkup = Some(ForceReply()))(msg)
     case _ => Unit
-  }
-
-  onCallbackWithTag(order) { implicit cbq =>
-    println("Hello")
-    println(cbq.data)
-    val usrActor = userActor(cbq.from.id)
-    cbq.message.foreach { msg => usrActor ! StartOrdering(msg, cbq.data.map(_.toLong).getOrElse(0L)) }
   }
 }
 

@@ -105,7 +105,6 @@ class DatabaseActor(db: Database) extends Actor {
   }
 }
 
-
   case class CreateOrder(msg: Message)
 
   case class IsAlreadyAuthorized(username: String, msg : Message)

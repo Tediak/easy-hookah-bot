@@ -11,6 +11,7 @@ class UserActor(id: Int, dbActor: ActorRef) extends Actor {
   var hookahId = 0L
   var hookahTaste: Option[String] = None
   var hookahPower: Option[String] = None
+  var when: Option[String] = None
   var comment: Option[String] = None
 
   def finishOrdering() = {
@@ -48,6 +49,7 @@ class UserActor(id: Int, dbActor: ActorRef) extends Actor {
       hookahId = 0L
       hookahTaste = None
       hookahPower = None
+      when = None
     case _ =>
       Unit
   }
