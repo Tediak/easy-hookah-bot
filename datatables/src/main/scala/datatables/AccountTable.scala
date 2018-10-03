@@ -7,15 +7,14 @@ import slick.lifted.Tag
 import scala.concurrent.Future
 
 class AccountTable(tag: Tag) extends Table[Account](tag, "accounts"){
-  val id = column[Long]("id", O.PrimaryKey, O.AutoInc)
+  val id = column[Long]("id", O.PrimaryKey)
   val hookahId = column[Long]("hookah_id")
-  val login = column[String]("login", O.Unique)
-  val password = column[String]("password")
-  val isLogined = column[Boolean]("is_logined")
+  val name = column[String]("name")
+  val nickname = column[Option[String]]("nickname")
 
   val hookahIdFk = foreignKey("hookah_id_fk", hookahId, HookahTable.table)(_.id, ForeignKeyAction.Cascade)
 
-  def * = (hookahId, login, password, isLogined, id) <> (Account.apply _ tupled, Account.unapply)
+  def * = (hookahId, name, nickname, id) <> (Account.apply _ tupled, Account.unapply)
 }
 
 object AccountTable {
@@ -37,6 +36,6 @@ class AccountRepository(db: Database) {
   def getById(accountId: Long): Future[Option[Account]] =
     db.run(accountTable.filter(_.id === accountId).result.headOption)
 
-  def updateByUser(login : String, isAuthorized : Boolean) =
-    db.run(accountTable.filter(x=> x.login === login).map(x=> x.isLogined).update(isAuthorized))
+//  def updateByUser(login : String, isAuthorized : Boolean) =
+//    db.run(accountTable.filter(x=> x.login === login).map(x=> x.isLogined).update(isAuthorized))
   }

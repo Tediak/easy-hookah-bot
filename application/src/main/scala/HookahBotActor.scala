@@ -1,18 +1,9 @@
 import akka.actor.{Actor, Props}
-import com.bot4s.telegram.methods.DeleteMessage
-import com.bot4s.telegram.{methods, models}
-//import info.mukel.telegrambot4s.api.declarative.{Callbacks, Commands}
-//import info.mukel.telegrambot4s.api.{Polling, TelegramBot}
-//import info.mukel.telegrambot4s.models.{ForceReply, KeyboardButton, ReplyKeyboardMarkup}
+import com.bot4s.telegram.methods.{DeleteMessage, EditMessageText, SendMessage}
 import slick.jdbc.PostgresProfile.api._
-import scala.concurrent.Future
-//import UserActor._
-//import DatabaseActor._
-
 import com.bot4s.telegram.api.declarative.{Callbacks, Commands}
 import com.bot4s.telegram.api.{Polling, TelegramBot}
 import com.bot4s.telegram.clients.ScalajHttpClient
-import com.bot4s.telegram.methods.{EditMessageReplyMarkup, EditMessageText, SendMessage}
 import com.bot4s.telegram.models._
 
 class HookahBotActor() extends TelegramBot with Polling with Commands
@@ -20,8 +11,8 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
 
   val client = new ScalajHttpClient("626944613:AAFOedBtg34Kl7g3NV1a4w7XeixM0AgIfg8")
   val db = Database.forConfig("postgres")
-  val dbActor = context.actorOf(DatabaseActor.props, "tediak_database_actor")
-  val manager = context.actorOf(OrderManagerActor.props, "manager_actor")
+  val dbActor = context.actorOf(DatabaseActor.props, "tediak-database-actor")
+  val manager = context.actorOf(OrderManagerActor.props, "manager-actor")
 
   // unique actor for per user
   def userActor(id: Int) =
@@ -169,13 +160,13 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
   onCallbackWithTag(finish) { implicit cbq =>
     cbq.data match {
       case Some("accept") =>
-        cbq.message.foreach{ msg =>
+        cbq.message.foreach { msg =>
           request(DeleteMessage(msg.chat.id, msg.messageId))
           reply("Супер! Ваш заказ был отправлен кальянщику. Ожидайте сообщения...")(msg)
           userActor(cbq.from.id) ! FinishOrdering(msg)
         }
       case Some("deny") =>
-        cbq.message.foreach{ msg =>
+        cbq.message.foreach { msg =>
           userActor(cbq.from.id) ! CancelOrdering(msg)
           request(DeleteMessage(msg.chat.id, msg.messageId))
           reply("Ваш заказ был успешно отменен.")(msg)
@@ -185,23 +176,18 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
 
   /* MESSAGE HANDLER */
 
-  onCommand ("/login") {
+  onCommand("/login") {
     implicit msg =>
-      msg.from.foreach {
-       from => dbActor ! IsAlreadyAuthorized(from.username.get, msg)
-      }
+      reply("Введите пароль, чтобы авторизироваться",
+        replyMarkup = Some(ForceReply()))
   }
 
-  onCommand ("/logout")
-  {
+  onCommand("/logout") {
     implicit msg =>
-      msg.from.foreach{
-        from =>dbActor ! Logout (from.username.get,msg)
-      }
-
+      manager ! Logout(msg.source)
   }
 
-  onMessage{ implicit msg =>
+  onMessage { implicit msg =>
     using(_.text) {
       case "Заказать кальян" =>
         msg.from.foreach {
@@ -223,11 +209,10 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
               replyMarkup = Some(finishMarkup))
           case Some("Введите промокод, который сказал вам кальянщик") =>
             reply("Спасибо!!!")
-          case Some ("Введите пароль, чтобы авторизироваться") => msg.from.foreach{
+          case Some("Введите пароль, чтобы авторизироваться") => msg.from.foreach {
             from =>
-              dbActor ! VerifyPassword (from.username.get, msg)
+              manager ! Login(msg, msg.text.getOrElse(""))
           }
-
           case _ => reply("Извините, не понимаю вас")
         }
     }
@@ -257,49 +242,65 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
         replyMarkup = Some(InlineKeyboardMarkup.singleColumn(
           set.map(s => InlineKeyboardButton.callbackData(s._2, orderTag(s._1.toString))).toSeq
         )))(msg)
-    case IsEmployeeAuthorized (msg, list) =>
+    case IsEmployeeAuthorized(msg, list) =>
       if (list.nonEmpty) {
 
         reply("Вы авторизованы\n" +
           "Кальянная: \n" +
           "Не забудьте выйти из аккаунта с помощью комманды /logout")(msg)
       }
-      else reply ("Пароль неверен")(msg)
-    case BotLogout (msg,isLogout : Boolean) =>
+      else reply("Пароль неверен")(msg)
+    case BotLogout(msg, isLogout: Boolean) =>
       if (isLogout)
-        reply ("Вы успешно вышли из аккаунта")(msg)
+        reply("Вы успешно вышли из аккаунта")(msg)
       else
-        reply ("Вы еще не авторизовались")(msg)
-    case EmployeeIsAlreadyAuthorized (msg) =>
-      reply ("Вы успешно авторизированы!\nВыход из аккаунта - /logout ")(msg)
-    case EmployeeIsNotAuthorizedYet (msg) =>
-      reply ("Вы еще не авторизовались")(msg)
-    case EmployeeForceAuthorize (msg) =>
+        reply("Вы еще не авторизовались")(msg)
+    case EmployeeIsAlreadyAuthorized(msg) =>
+      reply("Вы успешно авторизированы!\nВыход из аккаунта - /logout ")(msg)
+    case EmployeeIsNotAuthorizedYet(msg) =>
+      reply("Вы еще не авторизовались")(msg)
+    case EmployeeForceAuthorize(msg) =>
       reply("Введите пароль, чтобы авторизироваться", replyMarkup = Some(ForceReply()))(msg)
-//    case SendOrderMessafge(msg) =>
-//      reply("Вам пришел заказ ... от ... ",
-//        replyMarkup = Some(InlineKeyboardMarkup.singleColumn(Seq(
-//          InlineKeyboardButton.callbackData()
-//        ))))
+    //    case SendOrderMessafge(msg) =>
+    //      reply("Вам пришел заказ ... от ... ",
+    //        replyMarkup = Some(InlineKeyboardMarkup.singleColumn(Seq(
+    //          InlineKeyboardButton.callbackData()
+    //        ))))
+    case CantLogin(chatId, because) =>
+      request(SendMessage(chatId, "Не могу войти, потому что" + because))
+    case IsLogined(chatId) =>
+      request(SendMessage(chatId, "Вы успешно вошли в систему"))
+    case IsLogout(chatId) =>
+      request(SendMessage(chatId, "Вы успешно вышли из системы"))
+    case NotLogout(chatId, because) =>
+      request(SendMessage(chatId, "Вы не вышли из системы, потому что" + because))
     case _ => Unit
   }
 }
 
-case class EmployeeForceAuthorize (msg : Message)
+case class EmployeeForceAuthorize(msg: Message)
 
-case class EmployeeIsNotAuthorizedYet (msg: Message)
+case class EmployeeIsNotAuthorizedYet(msg: Message)
 
-case class EmployeeIsAlreadyAuthorized (msg : Message)
+case class EmployeeIsAlreadyAuthorized(msg: Message)
 
-case class IsEmployeeAuthorized (msg : Message, list : List[String] )
+case class IsEmployeeAuthorized(msg: Message, list: List[String])
 
-case class BotLogout (msg: Message, isLogout : Boolean)
+case class BotLogout(msg: Message, isLogout: Boolean)
 
 case class DenyOrdering(msg: Message, because: String)
 
 case class AcceptOrdering(msg: Message)
 
 case class EmptyHookahSet(msg: Message)
+
+case class CantLogin(chatId: Long, because: String)
+
+case class IsLogined(chatId: Long)
+
+case class IsLogout(chatId: Long)
+
+case class NotLogout(chatId: Long, because: String)
 
 case class HookahSet(set: Set[(Long, String)], msg: Message)
 

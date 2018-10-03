@@ -10,8 +10,9 @@ class HookahTable(tag: Tag) extends Table[Hookah](tag, "hookahs"){
   val id = column[Long]("id", O.PrimaryKey, O.AutoInc)
   val name = column[String]("name", O.Unique)
   val code = column[String]("code", O.Unique)
+  val password = column[String]("password", O.Unique)
 
-  def * = (name, code, id) <> (Hookah.apply _ tupled, Hookah.unapply)
+  def * = (name, code, password, id) <> (Hookah.apply _ tupled, Hookah.unapply)
 }
 
 object HookahTable {

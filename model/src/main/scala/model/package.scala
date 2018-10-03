@@ -5,15 +5,15 @@ package object model {
   case class Hookah(
                      name: String,
                      code: String,
+                     password: String,
                      id: Long = 0L
                    )
 
   case class Account(
                       hookahId: Long,
-                      login: String,
-                      password: String,
-                      isLogined: Boolean,
-                      id: Long = 0L
+                      name: String,
+                      nickname: Option[String],
+                      id: Long
                     )
 
   case class Guest(

@@ -12,7 +12,7 @@ class UserActor(id: Int, dbActor: ActorRef) extends Actor {
   var hookahTaste: Option[String] = None
   var hookahPower: Option[String] = None
   var when: Option[String] = None
-  var comment: Option[String] = None
+  var optComment: Option[String] = None
 
   def finishOrdering() = {
     isFree = true
@@ -41,11 +41,17 @@ class UserActor(id: Int, dbActor: ActorRef) extends Actor {
     case UpdateWhen(newWhen) =>
       when = newWhen
     case UpdateComment(newComment) =>
-      comment = newComment
-    //    case FinishOrdering(msg) =>
-    //      if(hookahTaste.isEmpty || hookahPower.isEmpty)
-    //        context.parent ! DenyOrdering(msg, "вы не указали какой-то из пунктов (вкус или жёсткость). " +
-    //          "Пересмотрите свой заказ, пожалуйста.")
+      optComment = newComment
+    case FinishOrdering(msg) =>
+      if(hookahTaste.isEmpty || hookahPower.isEmpty || when.isEmpty)
+        context.parent ! DenyOrdering(msg, "вы не указали какой-то из пунктов. " +
+          "Пересмотрите свой заказ, пожалуйста.")
+      else {
+        val orderTime = LocalDateTime.ofInstant(Instant.ofEpochSecond(msg.date), TimeZone.getDefault.toZoneId)
+          .plusMinutes(when.getOrElse("").toLong)
+        val order = Order(id, hookahId, hookahTaste, hookahPower, orderTime, comment = optComment)
+        context.actorSelection("/user/hookah-bot-actor/manager-actor") ! DirectOrder(order)
+      }
     case CancelOrdering(msg) =>
       isFree = true
       hookahId = 0L
