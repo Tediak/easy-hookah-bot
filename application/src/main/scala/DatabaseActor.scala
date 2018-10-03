@@ -141,7 +141,26 @@ class DatabaseActor(db: Database) extends Actor {
       } yield acc).result.headOption) onComplete {
         case Success(account) =>
           if (account.isEmpty) send ! FailedLogout(chatId, " сейчас вы не авторизованы")
-          else send ! SuccessfulLogout(chatId)
+          else {
+            accountRepository.delete(chatId)
+            send ! SuccessfulLogout(chatId)
+          }
+      }
+    case GetPromocode(chatId) =>
+      db.run((for{
+        acc <- accountTable if acc.id === chatId
+      } yield acc).result.headOption) onComplete{
+        case Success(acc) =>
+          if (acc.isEmpty) context.parent ! DenyPromocode(chatId)
+          else {
+            val hookahId = acc.map(_.hookahId).getOrElse(0L)
+            db.run((for {
+              hookah <- hookahTable if hookah.id === hookahId
+            } yield hookah.code).result.headOption) onComplete {
+              case Success(code) =>
+                context.parent ! AcceptPromocode(chatId, code)
+            }
+          }
       }
   }
 }
@@ -163,6 +182,8 @@ case class FindHookahMaker(hookahId: Long)
 case class CheckLogin(msg: Message, password: String)
 
 case class CheckLogout(chatId: Long)
+
+case class GetPromocode(chatId: Long)
 
 object DatabaseActor {
   def props = Props(new DatabaseActor(Database.forConfig("postgres")))

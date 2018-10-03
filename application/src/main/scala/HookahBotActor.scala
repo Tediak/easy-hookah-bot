@@ -41,7 +41,7 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
   val start = "Нажмите любую из кнопок, чтобы сделать новый заказ."
 
   // two main buttons for starting using bot
-  val startMarkup = Some(ReplyKeyboardMarkup.singleRow(
+  val userMarkup = Some(ReplyKeyboardMarkup.singleRow(
     Seq(
       KeyboardButton.text("Заказать кальян"),
       KeyboardButton.text("Ввести промокод")),
@@ -49,12 +49,16 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
     resizeKeyboard = Some(true)
   ))
 
+  val accountMarkup = Some(ReplyKeyboardMarkup.singleButton(
+    KeyboardButton.text("/promocode")
+  ))
+
   /* START MENU */
 
   onCommand("/start") {
     implicit msg =>
       reply(greetings(msg.from.map(_.firstName).getOrElse("Неизвестный")),
-        replyMarkup = startMarkup)(msg)
+        replyMarkup = userMarkup)(msg)
   }
 
   /* ORDERING */
@@ -187,6 +191,10 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
       manager ! Logout(msg.source)
   }
 
+  onCommand("/promocode") { implicit msg =>
+    dbActor ! GetPromocode(msg.source)
+  }
+
   onMessage { implicit msg =>
     using(_.text) {
       case "Заказать кальян" =>
@@ -244,7 +252,6 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
         )))(msg)
     case IsEmployeeAuthorized(msg, list) =>
       if (list.nonEmpty) {
-
         reply("Вы авторизованы\n" +
           "Кальянная: \n" +
           "Не забудьте выйти из аккаунта с помощью комманды /logout")(msg)
@@ -256,7 +263,8 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
       else
         reply("Вы еще не авторизовались")(msg)
     case EmployeeIsAlreadyAuthorized(msg) =>
-      reply("Вы успешно авторизированы!\nВыход из аккаунта - /logout ")(msg)
+      reply("Вы успешно авторизированы!\nВыход из аккаунта - /logout ",
+        replyMarkup = accountMarkup)(msg)
     case EmployeeIsNotAuthorizedYet(msg) =>
       reply("Вы еще не авторизовались")(msg)
     case EmployeeForceAuthorize(msg) =>
@@ -274,6 +282,10 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
       request(SendMessage(chatId, "Вы успешно вышли из системы"))
     case NotLogout(chatId, because) =>
       request(SendMessage(chatId, "Вы не вышли из системы, потому что" + because))
+    case AcceptPromocode(chatId, promocode) =>
+      request(SendMessage(chatId, "Промокод: " + promocode.getOrElse("")))
+    case DenyPromocode(chatId) =>
+      request(SendMessage(chatId, "У вас нет прав"))
     case _ => Unit
   }
 }
@@ -301,6 +313,10 @@ case class IsLogined(chatId: Long)
 case class IsLogout(chatId: Long)
 
 case class NotLogout(chatId: Long, because: String)
+
+case class AcceptPromocode(chatId: Long, promocode: Option[String])
+
+case class DenyPromocode(chatId: Long)
 
 case class HookahSet(set: Set[(Long, String)], msg: Message)
 
