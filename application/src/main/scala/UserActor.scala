@@ -1,18 +1,19 @@
 import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
 
-import akka.actor.{Actor, ActorRef, Props}
-import DatabaseActor._
+import akka.actor.{Actor, ActorRef, ActorSelection, Props}
 import model._
 import com.bot4s.telegram.models.Message
 
-class UserActor(id: Int, dbActor: ActorRef) extends Actor {
+class UserActor(userId: Long) extends Actor {
   var isFree = true
   var hookahId = 0L
   var hookahTaste: Option[String] = None
   var hookahPower: Option[String] = None
   var when: Option[String] = None
   var optComment: Option[String] = None
+
+  val manager: ActorSelection = context.actorSelection("/user/hookah-bot-actor/manager-actor")
 
   def finishOrdering() = {
     isFree = true
@@ -49,8 +50,8 @@ class UserActor(id: Int, dbActor: ActorRef) extends Actor {
       else {
         val orderTime = LocalDateTime.ofInstant(Instant.ofEpochSecond(msg.date), TimeZone.getDefault.toZoneId)
           .plusMinutes(when.getOrElse("").toLong)
-        val order = Order(id, hookahId, hookahTaste, hookahPower, orderTime, comment = optComment)
-        context.actorSelection("/user/hookah-bot-actor/manager-actor") ! DirectOrder(order)
+        val order = Order(userId, hookahId, hookahTaste, hookahPower, orderTime, comment = optComment)
+        manager ! DirectOrder(order)
       }
     case CancelOrdering(msg) =>
       isFree = true
@@ -81,5 +82,5 @@ case class OrderCreated(id: Long)
 
 
 object UserActor {
-  def props(id: Int, dbActor: ActorRef) = Props(new UserActor(id, dbActor))
+  def props(id: Int) = Props(new UserActor(id))
 }

@@ -4,7 +4,7 @@ import model.Hookah
 import slick.jdbc.PostgresProfile.api._
 import slick.lifted.Tag
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 class HookahTable(tag: Tag) extends Table[Hookah](tag, "hookahs"){
   val id = column[Long]("id", O.PrimaryKey, O.AutoInc)
@@ -33,4 +33,14 @@ class HookahRepository(db: Database) {
 
   def getById(hookahId: Long): Future[Option[Hookah]] =
     db.run(hookahTable.filter(_.id === hookahId).result.headOption)
+
+  def findPassword(pass: String)(implicit ec: ExecutionContext): Future[Set[Hookah]] =
+    db.run((for {
+      hookah <- hookahTable if hookah.password === pass
+    } yield hookah).result).map(_.toSet)
+
+  def getHookahsforUser(id: Long)(implicit ec: ExecutionContext): Future[Set[(Long, String)]] =
+    db.run((for {
+      hookah <- hookahTable
+    } yield (hookah.id, hookah.name)).result).map(_.toSet)
 }
