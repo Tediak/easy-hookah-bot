@@ -19,17 +19,15 @@ class OrderDatabaseActor(db: Database) extends Actor {
 //  val visitRepository = new VisitRepository(db)
 
   def receive: Receive = {
-    case CheckHookahs(id, msg) => {
-      val hookahSet = hookahRepository.getHookahsforUser(id.toLong)
-      val send = sender()
+    case CheckHookahs(userId) => {
+      val hookahSet = hookahRepository.getHookahsforUser(userId)
       hookahSet onComplete {
         case Success(set) =>
           if (set.isEmpty)
-            send ! EmptyHookahSet(msg)
-          else send ! HookahSet(set, msg)
-
+            context.parent ! EmptyHookahSet(userId)
+          else context.parent ! HookahSet(userId, set)
         case Failure(_) =>
-          send ! EmptyHookahSet(msg)
+          context.parent ! EmptyHookahSet(userId)
       }
     }
     case _ => Unit
@@ -40,6 +38,6 @@ object OrderDatabaseActor {
   def props = Props(new OrderDatabaseActor(Database.forConfig("postgres")))
 }
 
-case class CheckHookahs(id: Int, msg: Message)
+case class CheckHookahs(userId: Long)
 
 

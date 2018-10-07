@@ -17,10 +17,10 @@ package object model {
                     )
 
   case class Guest(
-                    nickname: String,
+                    nickname: Option[String],
                     firstName: String,
                     lastName: Option[String],
-                    id: Long = 0L
+                    id: Long
                   )
 
   case class Visit(

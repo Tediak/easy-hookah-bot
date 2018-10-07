@@ -4,7 +4,7 @@ import model.Account
 import slick.jdbc.PostgresProfile.api._
 import slick.lifted.Tag
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 class AccountTable(tag: Tag) extends Table[Account](tag, "accounts"){
   val id = column[Long]("id", O.PrimaryKey)
@@ -35,6 +35,9 @@ class AccountRepository(db: Database) {
 
   def getById(accountId: Long): Future[Option[Account]] =
     db.run(accountTable.filter(_.id === accountId).result.headOption)
+
+  def getAllEmployees(hookahId: Long)(implicit ec: ExecutionContext): Future[Set[Long]] =
+    db.run(accountTable.filter(_.hookahId === hookahId).map(_.id).result).map(_.toSet)
 
 //  def updateByUser(login : String, isAuthorized : Boolean) =
 //    db.run(accountTable.filter(x=> x.login === login).map(x=> x.isLogined).update(isAuthorized))

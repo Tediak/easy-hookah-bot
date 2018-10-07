@@ -27,8 +27,10 @@ object VisitTable {
 class VisitRepository(db: Database) {
   val visitTable = VisitTable.table
 
-  def create(visit: Visit): Future[Visit] =
+  def create(visit: Visit): Future[Visit] = {
+    println(visit.guestId)
     db.run(visitTable returning visitTable += visit)
+  }
 
   def update(visit: Visit): Future[Int] =
     db.run(visitTable.filter(_.id === visit.id).update(visit))

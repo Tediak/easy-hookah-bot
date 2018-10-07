@@ -1,7 +1,7 @@
 import akka.actor.{Actor, Props}
 import com.bot4s.telegram.models.Message
 import datatables.{AccountRepository, AccountTable, HookahRepository, HookahTable}
-import model.Account
+import model.{Account, Guest, Order}
 import slick.jdbc.PostgresProfile.api._
 
 import scala.concurrent.ExecutionContext
@@ -70,6 +70,11 @@ class EmployeeDatabaseActor(db: Database) extends Actor {
           }
         case _ => Unit
       }
+    case GetEmployeeSet(order, guest) =>
+      accountRepository.getAllEmployees(order.hookahId) onComplete {
+        case Success(set) =>
+          context.parent ! EmployeeSet(order, set, guest)
+      }
 
   }
 }
@@ -79,3 +84,5 @@ case class CheckLogin(msg: Message, password: String)
 case class CheckLogout(chatId: Long)
 
 case class GetPromocode(chatId: Long)
+
+case class GetEmployeeSet(order: Order, guest: Guest)

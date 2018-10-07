@@ -1,6 +1,6 @@
 import akka.actor.{Actor, Props}
-import com.bot4s.telegram.models.Message
-import model.Order
+import com.bot4s.telegram.models.{Message, User}
+import model.{Guest, Order}
 
 class EmployeeManagerActor() extends Actor {
 
@@ -25,14 +25,17 @@ class EmployeeManagerActor() extends Actor {
       context.parent ! IsLogout(chatId)
     case FailedLogout(chatId, because) =>
       context.parent ! NotLogout(chatId, because)
-    case DirectOrder(order) =>
+    case DirectOrder(order, guest) =>
+      emplDbActor ! GetEmployeeSet(order, guest)
+    case EmployeeSet(order, set, guest) =>
+      if (set.isEmpty)
+        context.parent ! DenyOrdering(guest.id, " сейчас нету свободных кальянщиков. Попробуйте заказать кальян позже")
+      else context.parent ! SendOrderToEmployees(order, set, guest)
     case _ => Unit
   }
 }
 
-case class DirectOrder(order: Order)
-
-case class OrderReceived()
+//case class OrderReceived()
 
 case class Login(msg: Message, password: String)
 
@@ -45,6 +48,12 @@ case class Logout(chatId: Long)
 case class FailedLogout(chatId: Long, because: String)
 
 case class SuccessfulLogout(chatId: Long)
+
+case class DirectOrder(order: Order, from: Guest)
+
+case class EmployeeSet(order: Order, set: Set[Long], guest: Guest)
+
+case class EmptyEmployeeSet(order: Order)
 
 object EmployeeManagerActor {
   def props(): Props = Props(new EmployeeManagerActor())

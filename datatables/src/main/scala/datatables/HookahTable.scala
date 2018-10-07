@@ -41,6 +41,17 @@ class HookahRepository(db: Database) {
 
   def getHookahsforUser(id: Long)(implicit ec: ExecutionContext): Future[Set[(Long, String)]] =
     db.run((for {
-      hookah <- hookahTable
-    } yield (hookah.id, hookah.name)).result).map(_.toSet)
+      visit <- VisitTable.table if visit.guestId === id
+      hookah <- hookahTable if hookah.id === visit.hookahId
+    } yield (hookah, visit.stars)).result).map(
+      _.groupBy(_._1)
+        .mapValues { value =>
+          val sum = value.map(_._2).sum
+          val avg = sum.toDouble / value.length
+          println(avg)
+          sum.toDouble / value.length
+        }
+        .toVector.sortBy(_._2)
+        .map(v => (v._1.id, v._1.name))
+        .toSet)
 }

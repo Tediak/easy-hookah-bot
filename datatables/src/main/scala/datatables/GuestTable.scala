@@ -7,8 +7,8 @@ import slick.lifted.Tag
 import scala.concurrent.Future
 
 class GuestTable(tag: Tag) extends Table[Guest](tag, "guests"){
-  val id = column[Long]("id", O.PrimaryKey, O.AutoInc)
-  val nickname = column[String]("nickname")
+  val id = column[Long]("id", O.PrimaryKey)
+  val nickname = column[Option[String]]("nickname")
   val firstName = column[String]("first_name")
   val lastName = column[Option[String]]("last_name")
 
