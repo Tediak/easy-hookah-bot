@@ -1,5 +1,5 @@
 import akka.actor.{Actor, Props}
-import com.bot4s.telegram.models.{Message, User}
+import com.bot4s.telegram.models.{KeyboardButton, Message, ReplyKeyboardMarkup, User}
 import model.{Guest, Order}
 
 class EmployeeManagerActor() extends Actor {
