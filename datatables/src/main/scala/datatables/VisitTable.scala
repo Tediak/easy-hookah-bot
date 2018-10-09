@@ -28,7 +28,6 @@ class VisitRepository(db: Database) {
   val visitTable = VisitTable.table
 
   def create(visit: Visit): Future[Visit] = {
-    println(visit.guestId)
     db.run(visitTable returning visitTable += visit)
   }
 

@@ -48,7 +48,6 @@ class HookahRepository(db: Database) {
         .mapValues { value =>
           val sum = value.map(_._2).sum
           val avg = sum.toDouble / value.length
-          println(avg)
           sum.toDouble / value.length
         }
         .toVector.sortBy(_._2)

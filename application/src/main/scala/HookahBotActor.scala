@@ -352,7 +352,7 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
     case NotLogout(chatId, because) =>
       request(SendMessage(chatId, "Вы не вышли из системы, потому что" + because))
     case AcceptPromocode(chatId, promocode) =>
-      request(SendMessage(chatId, "Промокод: " + promocode.getOrElse("")))
+      request(SendMessage(chatId, "Промокод: " + promocode))
     case DenyPromocode(chatId) =>
       request(SendMessage(chatId, "У вас нет прав"))
     case RightPromocode(chatId, hookahId) =>
@@ -392,7 +392,7 @@ case class NotLogout(chatId: Long, because: String)
 
 // Promocode
 
-case class AcceptPromocode(chatId: Long, promocode: Option[String])
+case class AcceptPromocode(chatId: Long, promocode: String)
 
 case class DenyPromocode(chatId: Long)
 
