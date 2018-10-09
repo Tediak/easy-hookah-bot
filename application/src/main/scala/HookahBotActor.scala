@@ -271,6 +271,7 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
 
   onCommand("/promocode") { implicit msg =>
     employeeDbActor ! GetPromocode(msg.source)
+
   }
 
   onCommand("/cancel") { implicit msg =>
