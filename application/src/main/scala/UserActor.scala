@@ -29,12 +29,6 @@ class UserActor(user: Guest) extends Actor {
       if (isFree) {
         isFree = false
         hookahId = id
-        //          Some(Order(
-        //            msg.from.map(_.id).getOrElse(0).toLong,
-        //            hookahId,
-        //            None,
-        //            None,
-        //            LocalDateTime.ofInstant(Instant.ofEpochSecond(msg.date), TimeZone.getDefault.toZoneId)))
         context.parent ! AcceptOrdering(user.id)
       }
       else
@@ -49,18 +43,10 @@ class UserActor(user: Guest) extends Actor {
     case UpdateComment(newComment) =>
       optComment = newComment
     case FinishOrdering(time: Int) =>
-//      println(user.nickname.getOrElse(""))
-//      println(msg.from.map(_.username).getOrElse(""))
-//      if(hookahTaste.isEmpty || hookahPower.isEmpty || when.isEmpty)
-//        context.parent ! DenyOrdering(msg, "вы не указали какой-то из пунктов. " +
-//          "Пересмотрите свой заказ, пожалуйста.")
-//      else {
         val orderTime = epochToLocalDateTimeConverter(time)
           .plusMinutes(when.getOrElse("").toLong)
         val order = Order(user.id, hookahId, hookahTaste, hookahPower, orderTime, comment = optComment)
-      println(user.nickname)
         manager ! DirectOrder(order, user)
-//      }
     case CancelOrdering =>
       if(!isFree) {
         isFree = true

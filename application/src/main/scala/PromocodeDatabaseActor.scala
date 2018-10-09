@@ -8,23 +8,21 @@ import model._
 import slick.jdbc.PostgresProfile.api._
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Random}
 
 class PromocodeDatabaseActor(db: Database) extends Actor {
-
   implicit val ec: ExecutionContext = ExecutionContext.global
 
-  //  val accountRepository = new AccountRepository(db)
   val guestRepository = new GuestRepository(db)
   val hookahRepository = new HookahRepository(db)
-//  val orderRepository = new OrderRepository(db)
     val visitRepository = new VisitRepository(db)
 
   val hookahTable = HookahTable.table
 
   def epochToLocalDateTimeConverter(epoch: Int): LocalDateTime =
     LocalDateTime.ofInstant(Instant.ofEpochSecond(epoch), TimeZone.getDefault.toZoneId)
+
+  def generateRandomCode: String = Random.nextInt(10).toString + Random.nextInt(10).toString + Random.nextInt(10)
 
   def receive: Receive = {
     case CheckPromocode(chatId, user, code) =>
@@ -37,17 +35,15 @@ class PromocodeDatabaseActor(db: Database) extends Actor {
               guestRepository.create(Guest(u.username, u.firstName, u.lastName, chatId))
             }
             context.parent ! RightPromocode(chatId, h.id)
-            hookahRepository.update(Hookah(h.name, h.code, h.password, h.id))
+            hookahRepository.update(Hookah(h.name, h.code.take(2) + generateRandomCode, h.password, h.id))
           }
           if (hookah.isEmpty) context.parent ! WrongPromocode(chatId)
       }
     case NewVisit(guestId, hookahId, time, stars) =>
-      println("New visit")
       visitRepository.create(Visit(guestId, hookahId, epochToLocalDateTimeConverter(time), stars))
     case _ => Unit
   }
 }
-
 
 object PromocodeDatabaseActor {
   def props = Props(new PromocodeDatabaseActor(Database.forConfig("postgres")))
