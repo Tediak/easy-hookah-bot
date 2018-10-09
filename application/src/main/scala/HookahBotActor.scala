@@ -59,6 +59,15 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
     resizeKeyboard = Some(true)
   ))
 
+
+  val hookahMarkup = Some(ReplyKeyboardMarkup.singleRow(
+    Seq(
+      KeyboardButton.text("Принять заказ"),
+      KeyboardButton.text("Отвергнуть заказ")),
+    oneTimeKeyboard = Some(true),
+    resizeKeyboard = Some(true)
+  ))
+
   val accountMarkup = Some(ReplyKeyboardMarkup.singleButton(
     KeyboardButton.text("/promocode")
   ))
@@ -325,7 +334,7 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
       request(SendMessage(userId, "Не могу отменить ваш заказ."))
     case SendOrderToEmployees(userOrder, emplSet, guest) =>
       emplSet foreach { id =>
-        request(SendMessage(id, orderMessage(userOrder, guest)))
+        request(SendMessage(id, orderMessage(userOrder, guest), replyMarkup = hookahMarkup))
       }
     //    case SendOrderMessage(msg) =>
     //      reply("Вам пришел заказ ... от ... ",
