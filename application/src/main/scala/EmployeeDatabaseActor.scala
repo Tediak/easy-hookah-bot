@@ -16,6 +16,7 @@ class EmployeeDatabaseActor(db: Database) extends Actor {
   implicit val ec: ExecutionContext = ExecutionContext.global
 
   val bot = context.actorSelection("/user/hookah-bot-actor")
+  val promocodeDbActor = context.actorSelection ("/user/hookah-bot-actor/promocode-database-actor")
 
   val hookahRepository = new HookahRepository(db)
   val accountRepository = new AccountRepository(db)
@@ -65,9 +66,11 @@ class EmployeeDatabaseActor(db: Database) extends Actor {
             val hookahId = acc.map(_.hookahId).getOrElse(0L)
             db.run((for {
               hookah <- HookahTable.table if hookah.id === hookahId
-            } yield hookah.code).result.headOption) onComplete {
-              case Success(code) =>
-                bot ! AcceptPromocode(chatId, code.getOrElse(""))
+            } yield (hookah.code, hookah.id)).result.headOption) onComplete {
+              case Success(code) => {
+                bot ! AcceptPromocode(chatId, code.map(_._1).getOrElse(""))
+                promocodeDbActor ! ChangePromocode (code.map(_._2).getOrElse(0))
+              }
             }
           }
         case _ => Unit
