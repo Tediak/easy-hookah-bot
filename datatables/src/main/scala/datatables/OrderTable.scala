@@ -16,11 +16,12 @@ class OrderTable(tag: Tag) extends Table[Order](tag, "orders"){
   val hookahPower = column[Option[String]]("hookah_power")
   val time = column[LocalDateTime]("time")
   val comment = column[Option[String]]("comment")
+  val isAccepted = column[Boolean]("is_accepted")
 
   val guestIdFk = foreignKey("guest_id_fk", guestId, GuestTable.table)(_.id, ForeignKeyAction.Cascade)
   val hookahIdFk = foreignKey("hookah_id_fk", hookahId, HookahTable.table)(_.id, ForeignKeyAction.Cascade)
 
-  def * = (guestId, hookahId, hookahTaste, hookahPower, time, comment, id) <> (Order.apply _ tupled, Order.unapply)
+  def * = (guestId, hookahId, hookahTaste, hookahPower, time, comment, isAccepted, id) <> (Order.apply _ tupled, Order.unapply)
 }
 
 object OrderTable {

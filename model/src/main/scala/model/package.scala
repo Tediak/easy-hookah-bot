@@ -38,6 +38,7 @@ package object model {
                     hookahPower: Option[String],
                     time: LocalDateTime,
                     comment: Option[String] = None,
+                    isAccepted: Boolean = false,
                     id: Long = 0L
                   )
 }

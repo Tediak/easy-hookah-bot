@@ -30,7 +30,13 @@ class PromocodeDatabaseActor(db: Database) extends Actor {
   def epochToLocalDateTimeConverter(epoch: Int): LocalDateTime =
     LocalDateTime.ofInstant(Instant.ofEpochSecond(epoch), TimeZone.getDefault.toZoneId)
 
-  def generateRandomCode: String = Random.nextInt(10).toString + Random.nextInt(10).toString + Random.nextInt(10)
+  def generateRandomCode(predCode: String): String = {
+    val newCode = predCode.take(2) + Random.nextInt(10).toString + Random.nextInt(10).toString + Random.nextInt(10).toString
+    if (newCode == predCode)
+      generateRandomCode(predCode)
+    else newCode
+  }
+
 
   def receive: Receive = {
     case CheckPromocode(chatId, user, code) =>
@@ -43,7 +49,7 @@ class PromocodeDatabaseActor(db: Database) extends Actor {
               guestRepository.create(Guest(u.username, u.firstName, u.lastName, chatId))
             }
             context.parent ! RightPromocode(chatId, h.id)
-            hookahRepository.update(Hookah(h.name, h.code.take(2) + generateRandomCode, h.password, h.id))
+            hookahRepository.update(Hookah(h.name, generateRandomCode(h.code), h.password, h.id))
           }
           if (hookah.isEmpty) context.parent ! WrongPromocode(chatId)
       }

@@ -3,6 +3,8 @@ import java.util.TimeZone
 
 import akka.actor.{Actor, ActorRef, ActorSelection, Props}
 import model._
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
 import com.bot4s.telegram.models.{Message, User}
 
 class UserActor(user: Guest) extends Actor {
@@ -16,6 +18,7 @@ class UserActor(user: Guest) extends Actor {
   val emptyOrder = Order(user.id, 0, None, None, LocalDateTime.MIN, None)
 
   val manager: ActorSelection = context.actorSelection("/user/hookah-bot-actor/manager-actor")
+  val orderDbActor = context.actorSelection("/user/hookah-bot-actor/order-database-actor")
 
   def finishOrdering() = {
     isFree = true
@@ -46,7 +49,12 @@ class UserActor(user: Guest) extends Actor {
         val orderTime = epochToLocalDateTimeConverter(time)
           .plusMinutes(when.getOrElse("").toLong)
         val order = Order(user.id, hookahId, hookahTaste, hookahPower, orderTime, comment = optComment)
-        manager ! DirectOrder(order, user)
+      context.system.scheduler.scheduleOnce(
+        10 seconds,
+        context.parent,
+        DenyOrdering(user.id, " ответа от кальянщиков не было на протяжении десяти минут." +
+          "Приносим извинения за неудобства."))
+        orderDbActor ! CreateOrder(user, order)
     case CancelOrdering =>
       if(!isFree) {
         isFree = true

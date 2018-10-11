@@ -12,10 +12,12 @@ class OrderDatabaseActor(db: Database) extends Actor {
 
   implicit val ec: ExecutionContext = ExecutionContext.global
 
+  val manager = context.actorSelection("/user/hookah-bot-actor/manager-actor")
+
 //  val accountRepository = new AccountRepository(db)
 //  val guestRepository = new GuestRepository(db)
   val hookahRepository = new HookahRepository(db)
-//  val orderRepository = new OrderRepository(db)
+  val orderRepository = new OrderRepository(db)
 //  val visitRepository = new VisitRepository(db)
 
   def receive: Receive = {
@@ -30,6 +32,11 @@ class OrderDatabaseActor(db: Database) extends Actor {
           context.parent ! EmptyHookahSet(userId)
       }
     }
+    case CreateOrder(from, order) =>
+      orderRepository.create(order) onComplete {
+        case Success(o) =>
+          manager ! DirectOrder(o, from)
+      }
     case _ => Unit
   }
 }
@@ -39,5 +46,7 @@ object OrderDatabaseActor {
 }
 
 case class CheckHookahs(userId: Long)
+
+case class CreateOrder(from: Guest, order: Order)
 
 
