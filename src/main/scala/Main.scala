@@ -22,6 +22,5 @@ object Main {
     Await.result(db.run(AccountTable.table.schema.create), Duration.Inf)
     Await.result(db.run(OrderTable.table.schema.create), Duration.Inf)
     Await.result(db.run(VisitTable.table.schema.create), Duration.Inf)
-    val hookahRepository = new HookahRepository(db)
   }
 }
