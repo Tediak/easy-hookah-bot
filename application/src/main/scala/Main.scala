@@ -9,7 +9,7 @@ import scala.concurrent.duration.Duration
 object Main {
 
   def main(args: Array[String]): Unit = {
-//    init()
+    //    init()
     val system = ActorSystem("hookah-system")
     system.actorOf(HookahBotActor.props(), "hookah-bot-actor")
 
@@ -23,7 +23,5 @@ object Main {
     Await.result(db.run(OrderTable.table.schema.create), Duration.Inf)
     Await.result(db.run(VisitTable.table.schema.create), Duration.Inf)
     val hookahRepository = new HookahRepository(db)
-
-    Await.result(hookahRepository.create(Hookah("Caffetoria", "cf000", "1234")), Duration.Inf)
   }
 }

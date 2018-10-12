@@ -39,4 +39,19 @@ class VisitRepository(db: Database) {
 
   def getById(visitId: Long): Future[Option[Visit]] =
     db.run(visitTable.filter(_.id === visitId).result.headOption)
+
+  def getUserStats(userId: Long)(implicit ec: ExecutionContext) =
+    db.run((for{
+      visit <- visitTable if visit.guestId === userId
+      hookah <- HookahTable.table if hookah.id === visit.hookahId
+    } yield (hookah, visit))
+        .map(v => (v._1.id, v._1.name, v._1.freeHookahNumber, v._2.stars))
+      .result)
+    .map(_
+      .groupBy(_._2)
+    .mapValues{ visit =>
+      val avgStar = visit.map(_._4).sum.toDouble / visit.size
+      val freeHookahNumber = visit.map(_._3).head
+      (avgStar, visit.size, freeHookahNumber)
+    }.toSet)
 }

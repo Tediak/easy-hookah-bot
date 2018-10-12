@@ -49,7 +49,7 @@ class PromocodeDatabaseActor(db: Database) extends Actor {
               guestRepository.create(Guest(u.username, u.firstName, u.lastName, chatId))
             }
             context.parent ! RightPromocode(chatId, h.id)
-            hookahRepository.update(Hookah(h.name, generateRandomCode(h.code), h.password, h.id))
+            hookahRepository.update(Hookah(h.name, generateRandomCode(h.code), h.password, h.freeHookahNumber, h.id))
           }
           if (hookah.isEmpty) context.parent ! WrongPromocode(chatId)
       }
@@ -67,6 +67,11 @@ class PromocodeDatabaseActor(db: Database) extends Actor {
                   .update(createPromocode(code)))
             }
       }
+    case GetStats(userId) =>
+      visitRepository.getUserStats(userId).onComplete {
+        case Success(set) =>
+          context.parent ! UserStats(userId, set)
+      }
     case _ => Unit
   }
 }
@@ -80,3 +85,5 @@ case class CheckPromocode(chatId: Long, user: Option[User], promocode: String)
 case class NewVisit(guestId: Long, hookahId: Long, time: Int, stars: Int)
 
 case class ChangePromocode (hookahId : Long)
+
+case class GetStats(userId: Long)

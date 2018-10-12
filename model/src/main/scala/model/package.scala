@@ -6,6 +6,7 @@ package object model {
                      name: String,
                      code: String,
                      password: String,
+                     freeHookahNumber: Int,
                      id: Long = 0L
                    )
 

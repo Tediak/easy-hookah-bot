@@ -19,7 +19,7 @@ class UserActor(user: Guest) extends Actor {
 
   val manager: ActorSelection = context.actorSelection("/user/hookah-bot-actor/manager-actor")
   val orderDbActor = context.actorSelection("/user/hookah-bot-actor/order-database-actor")
-
+import scala.concurrent.ExecutionContext.Implicits.global
   def finishOrdering() = {
     isFree = true
   }
@@ -50,7 +50,7 @@ class UserActor(user: Guest) extends Actor {
           .plusMinutes(when.getOrElse("").toLong)
         val order = Order(user.id, hookahId, hookahTaste, hookahPower, orderTime, comment = optComment)
       context.system.scheduler.scheduleOnce(
-        10 seconds,
+        10 minutes,
         context.parent,
         DenyOrdering(user.id, " ответа от кальянщиков не было на протяжении десяти минут." +
           "Приносим извинения за неудобства."))

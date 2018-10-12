@@ -13,12 +13,8 @@ class OrderDatabaseActor(db: Database) extends Actor {
   implicit val ec: ExecutionContext = ExecutionContext.global
 
   val manager = context.actorSelection("/user/hookah-bot-actor/manager-actor")
-
-//  val accountRepository = new AccountRepository(db)
-//  val guestRepository = new GuestRepository(db)
   val hookahRepository = new HookahRepository(db)
   val orderRepository = new OrderRepository(db)
-//  val visitRepository = new VisitRepository(db)
 
   def receive: Receive = {
     case CheckHookahs(userId) => {
