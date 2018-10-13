@@ -9,7 +9,7 @@ import scala.concurrent.duration.Duration
 object Main {
 
   def main(args: Array[String]): Unit = {
-    //    init()
+    // init()
     val system = ActorSystem("hookah-system")
     system.actorOf(HookahBotActor.props(), "hookah-bot-actor")
 

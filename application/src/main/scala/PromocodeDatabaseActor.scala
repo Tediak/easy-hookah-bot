@@ -28,7 +28,7 @@ class PromocodeDatabaseActor(db: Database) extends Actor {
   val hookahTable = HookahTable.table
 
   def epochToLocalDateTimeConverter(epoch: Int): LocalDateTime =
-    LocalDateTime.ofInstant(Instant.ofEpochSecond(epoch), TimeZone.getDefault.toZoneId)
+    LocalDateTime.ofInstant(Instant.ofEpochSecond(epoch), TimeZone.getDefault.toZoneId).plusHours(3)
 
   def generateRandomCode(predCode: String): String = {
     val newCode = predCode.take(2) + Random.nextInt(10).toString + Random.nextInt(10).toString + Random.nextInt(10).toString

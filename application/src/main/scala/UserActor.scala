@@ -1,11 +1,8 @@
 import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
 
-import akka.actor.{Actor, ActorRef, ActorSelection, Props}
+import akka.actor.{Actor, ActorSelection, Props}
 import model._
-import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
-import com.bot4s.telegram.models.{Message, User}
 
 class UserActor(user: Guest) extends Actor {
   var isFree = true
@@ -19,13 +16,9 @@ class UserActor(user: Guest) extends Actor {
 
   val manager: ActorSelection = context.actorSelection("/user/hookah-bot-actor/manager-actor")
   val orderDbActor = context.actorSelection("/user/hookah-bot-actor/order-database-actor")
-import scala.concurrent.ExecutionContext.Implicits.global
-  def finishOrdering() = {
-    isFree = true
-  }
 
   def epochToLocalDateTimeConverter(epoch: Int): LocalDateTime =
-    LocalDateTime.ofInstant(Instant.ofEpochSecond(epoch), TimeZone.getDefault.toZoneId)
+    LocalDateTime.ofInstant(Instant.ofEpochSecond(epoch), TimeZone.getDefault.toZoneId).plusHours(3)
 
   def receive: Receive = {
     case StartOrdering(id) =>
@@ -36,7 +29,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
       }
       else
         context.parent ! DenyOrdering(user.id, " предыдущий заказ не ещё не обработан. " +
-          "Подождите, пока обработается предыдущий заказ, или отмените его с помощью /cancel")
+          "Подождите, пока обработается предыдущий заказ.")
     case UpdateTaste(newTaste) =>
       hookahTaste = newTaste
     case UpdatePower(newPower) =>
@@ -49,11 +42,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
         val orderTime = epochToLocalDateTimeConverter(time)
           .plusMinutes(when.getOrElse("").toLong)
         val order = Order(user.id, hookahId, hookahTaste, hookahPower, orderTime, comment = optComment)
-      context.system.scheduler.scheduleOnce(
-        10 minutes,
-        context.parent,
-        DenyOrdering(user.id, " ответа от кальянщиков не было на протяжении десяти минут." +
-          "Приносим извинения за неудобства."))
         orderDbActor ! CreateOrder(user, order)
     case CancelOrdering =>
       if(!isFree) {

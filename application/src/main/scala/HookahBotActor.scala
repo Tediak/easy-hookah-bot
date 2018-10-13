@@ -165,7 +165,7 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
               parseMode = Some(ParseMode.Markdown)))
           case "deny" =>
             request(EditMessageText(Some(msg.source), Some(msg.messageId),
-              text = "Заказ *#" + data.split(":").head + "*был отменен",
+              text = "Заказ *#" + data.split(":").head + "* был отменен",
               replyMarkup = None,
               parseMode = Some(ParseMode.Markdown)))
 
@@ -375,9 +375,7 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
     // from UserActor after starting ordering when previous order isn't completed, or other
     case DenyOrdering(userId, because) =>
       request(SendMessage(userId, text = "Извините, не могу принять ваш заказ, потому что" + because))
-      context.child(userId.toString) foreach { user =>
-        user ! PoisonPill
-      }
+      context.child(userId.toString) foreach { _ ! PoisonPill }
     // from UserActor when it can start making order
     case AcceptOrdering(userId) =>
       startOrdering(userId)
@@ -401,6 +399,10 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
           replyMarkup = receiveOrderMarkup(userOrder.id),
           parseMode = Some(ParseMode.Markdown)))
       }
+    case OrderTimeout(userOrder) =>
+      request(SendMessage(userOrder.guestId, "Ответа от кальянщиков не было на протяжении 10 минут, поэтому заказ #" +
+        userOrder.id.toString + " был отменен. Приношу извинения за неудобства"))
+      context.child(userOrder.guestId.toString) foreach { _ ! PoisonPill }
     case OrderWasAccepted(userId, userOrder) =>
       request(SendMessage(userId, "Ваш заказ (#" + userOrder.id.toString + ") был принят! Ожидаем вас в " + dateFormatter(userOrder.time)))
       context.child(userId.toString) foreach { context.system.scheduler.scheduleOnce(60 minutes, _, PoisonPill) }
@@ -461,7 +463,7 @@ case class SendOrderToEmployees(order: Order, emplSet: Set[Long], guest: Guest)
 
 case class OrderWasAccepted(userId: Long, order: Order)
 
-case class OrderTimeout(userId: Long)
+case class OrderTimeout(order: Order)
 
 // Login
 

@@ -1,0 +1,1 @@
+bot: sbt run -Dhttp.port=5000

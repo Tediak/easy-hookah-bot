@@ -1,16 +1,11 @@
 import akka.actor.{Actor, Props}
 import com.bot4s.telegram.models.{KeyboardButton, Message, ReplyKeyboardMarkup, User}
 import model.{Guest, Order}
+import scala.concurrent.duration._
 
 class EmployeeManagerActor() extends Actor {
-
-//  val dbActor =  context.actorSelection("/user/hookah-bot-actor/tediak-database-actor")
   val emplDbActor = context.actorOf(EmployeeDatabaseActor.props, "employee-database-actor")
 
-//  def getHookahMaker(chatId: Long) =
-//    context.child(chatId.toString).getOrElse{
-//      context.actorOf(HookahMakerActor.props(chatId))
-//    }
 
   def receive: Receive = {
     case Login(msg, password) =>

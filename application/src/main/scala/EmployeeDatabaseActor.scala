@@ -71,7 +71,6 @@ class EmployeeDatabaseActor(db: Database) extends Actor {
             } yield (hookah.code, hookah.id)).result.headOption) onComplete {
               case Success(code) => {
                 bot ! AcceptPromocode(chatId, code.map(_._1).getOrElse(""))
-//                promocodeDbActor ! ChangePromocode (code.map(_._2).getOrElse(0))
               }
             }
           }

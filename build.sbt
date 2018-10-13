@@ -34,5 +34,5 @@ lazy val application =
 lazy val root =
   Project("easy-hookah-bot", file("."))
     .dependsOn(application)
-
-
+    .enablePlugins(JavaAppPackaging)
+    .settings(mainClass in Compile := Some("Main"))
