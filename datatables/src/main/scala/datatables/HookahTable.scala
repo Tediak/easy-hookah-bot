@@ -11,8 +11,9 @@ class HookahTable(tag: Tag) extends Table[Hookah](tag, "hookahs"){
   val name = column[String]("name", O.Unique)
   val code = column[String]("code", O.Unique)
   val password = column[String]("password", O.Unique)
+  val freeHookahNumber = column[Int]("free_hookah")
 
-  def * = (name, code, password, id) <> (Hookah.apply _ tupled, Hookah.unapply)
+  def * = (name, code, password, freeHookahNumber ,id) <> (Hookah.apply _ tupled, Hookah.unapply)
 }
 
 object HookahTable {
@@ -23,7 +24,7 @@ class HookahRepository(db: Database) {
   val hookahTable = HookahTable.table
 
   def create(hookah: Hookah): Future[Hookah] =
-    db.run(hookahTable returning hookahTable += hookah)
+    db.run(hookahTable returning  hookahTable.map(_.id) into ((hookahTable,id) => hookahTable.copy (id = id)) += hookah)
 
   def update(hookah: Hookah): Future[Int] =
     db.run(hookahTable.filter(_.id === hookah.id).update(hookah))
@@ -48,7 +49,6 @@ class HookahRepository(db: Database) {
         .mapValues { value =>
           val sum = value.map(_._2).sum
           val avg = sum.toDouble / value.length
-          println(avg)
           sum.toDouble / value.length
         }
         .toVector.sortBy(_._2)

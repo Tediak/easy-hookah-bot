@@ -28,11 +28,11 @@ lazy val application =
       resolvers += Resolver.sonatypeRepo("staging"),
       libraryDependencies ++= Seq(
         "com.typesafe.akka" %% "akka-actor" % "2.5.16",
-        "com.bot4s" %% "telegram-akka" % "4.0.0-RC1",
-      )
+        "com.bot4s" %% "telegram-akka" % "4.0.0-RC1")
     )
 
 lazy val root =
   Project("easy-hookah-bot", file("."))
-    .aggregate(application)
-
+    .dependsOn(application)
+    .enablePlugins(JavaAppPackaging)
+    .settings(mainClass in Compile := Some("Main"))

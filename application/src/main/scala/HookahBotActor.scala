@@ -1,32 +1,51 @@
-import akka.actor.{Actor, ActorRef, ActorSelection, Props}
-import com.bot4s.telegram.methods.{DeleteMessage, EditMessageReplyMarkup, EditMessageText, SendMessage}
-import slick.jdbc.PostgresProfile.api._
+import java.time.LocalDateTime
+
+import akka.actor.{Actor, ActorRef, ActorSelection, PoisonPill, Props}
+import com.bot4s.telegram.methods._
 import com.bot4s.telegram.api.declarative.{Callbacks, Commands}
 import com.bot4s.telegram.api.{Polling, TelegramBot}
 import com.bot4s.telegram.clients.ScalajHttpClient
 import com.bot4s.telegram.models._
-import model.{Guest, Order}
+import model.{Guest, Hookah, Order}
 
+import scala.concurrent.duration._
 import scala.concurrent.Future
+import scala.io.Source
+
 
 class HookahBotActor() extends TelegramBot with Polling with Commands
   with Callbacks with Actor {
 
-  val client = new ScalajHttpClient("626944613:AAFOedBtg34Kl7g3NV1a4w7XeixM0AgIfg8")
-
-  val manager: ActorRef = context.actorOf(EmployeeManagerActor.props, "manager-actor")
+  val client = new ScalajHttpClient("528618622:AAERcLVWG5eA29h1WEwR-Fr4I1bGHHrwESA")
+  val manager = context.actorOf(EmployeeManagerActor.props, "manager-actor")
 
   val orderDbActor: ActorRef = context.actorOf(OrderDatabaseActor.props, "order-database-actor")
-  val promocodeDbActor: ActorRef = context.actorOf(PromocodeDatabaseActor.props, "promocode-database-actor")
+  val promocodeDbActor: ActorRef = context.actorOf(
+    PromocodeDatabaseActor.props,
+    name = "promocode-database-actor")
   val employeeDbActor: ActorSelection = context.actorSelection("/user/hookah-bot-actor/manager-actor/employee-database-actor")
 
   // unique actor for per user
   def userActor(id: Long, user: Option[User]): ActorRef =
     context.child(id.toString).getOrElse {
-      val userGuest = (for( u <- user )
+      val userGuest = (for (u <- user)
         yield Guest(u.username, u.firstName, u.lastName, id)).getOrElse(Guest(None, "", None, 0L))
       context.actorOf(UserActor.props(userGuest), id.toString)
     }
+
+  def hookahColumn (name : String)(password: String)(freeHookah : Option[Int]) : Hookah  = {
+    import scala.util.Random
+    def createCode : String = {
+      val codePrefix = Random.alphanumeric.take(2).toString.toLowerCase
+      codePrefix.forall(ch => ch >= 'a' && ch <= 'z') match {
+        case true => codePrefix ++ Random.nextInt.abs.toString.take(3)
+        case false => createCode
+      }
+    }
+    Hookah (name, createCode, password, freeHookah.getOrElse(0))
+  }
+
+  def dateFormatter(date: LocalDateTime) = date.toLocalTime.toString
 
   val order = "order"
   val taste = "taste"
@@ -35,6 +54,7 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
   val finish = "finish"
   val when = "when"
   val stars = "stars"
+  val receiveOrder = "receive"
 
   val orderTag = prefixTag(order) _
   val tasteTag = prefixTag(taste) _
@@ -44,32 +64,34 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
   val finishTag = prefixTag(finish) _
   val starsTag = prefixTag(stars) _
 
-  def greetings(name: String) = "Привет, " + name +
-    "! Это бот-кальянщик, который упростит тебе твою жизнь :)"
+  def receiveOrderTag(orderId: Long) = prefixTag(receiveOrder + orderId.toString + ":") _
+
+  def greetings(name: String) = "*Привет,* *" + name +
+    "*! Я бот-кальянщик, который немного упростит тебе твою жизнь, и поможет " +
+    "заказать кальян прямо из своего телефона \uD83C\uDF2A"
 
   // message for start menu
   val start = "Нажмите любую из кнопок, чтобы сделать новый заказ."
 
   // two main buttons for starting using bot
-  val userMarkup = Some(ReplyKeyboardMarkup.singleRow(
+  val userMarkup = Some(ReplyKeyboardMarkup.singleColumn(
     Seq(
-      KeyboardButton.text("Заказать кальян"),
-      KeyboardButton.text("Ввести промокод")),
+      KeyboardButton.text("Заказать кальян\uD83C\uDF2A"),
+      KeyboardButton.text("Ввести промокод\uD83D\uDD20"),
+      KeyboardButton.text("Посмотреть статистику\uD83D\uDCC8")),
     oneTimeKeyboard = Some(true),
     resizeKeyboard = Some(true)
   ))
 
 
-  val hookahMarkup = Some(ReplyKeyboardMarkup.singleRow(
+  def receiveOrderMarkup(orderId: Long) = Some(InlineKeyboardMarkup.singleRow(
     Seq(
-      KeyboardButton.text("Принять заказ"),
-      KeyboardButton.text("Отвергнуть заказ")),
-    oneTimeKeyboard = Some(true),
-    resizeKeyboard = Some(true)
+      InlineKeyboardButton.callbackData("✅Принять заказ", receiveOrderTag(orderId)("accept")),
+      InlineKeyboardButton.callbackData("\uD83D\uDEABОтвергнуть заказ", receiveOrderTag(orderId)("deny")))
   ))
 
   val accountMarkup = Some(ReplyKeyboardMarkup.singleButton(
-    KeyboardButton.text("/promocode")
+    KeyboardButton.text("\uD83D\uDD20Получить промокод")
   ))
 
   /* START MENU */
@@ -77,85 +99,110 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
   onCommand("/start") {
     implicit msg =>
       reply(greetings(msg.from.map(_.firstName).getOrElse("Неизвестный")),
-        replyMarkup = userMarkup)(msg)
+        replyMarkup = userMarkup,
+        parseMode = Some(ParseMode.Markdown))(msg)
   }
 
   /* ORDERING */
 
   // buttons with three main tastes of hookah
   val tasteMarkup: InlineKeyboardMarkup = InlineKeyboardMarkup.singleColumn(Seq(
-    InlineKeyboardButton.callbackData("Кислый", tasteTag("Кислый")),
-    InlineKeyboardButton.callbackData("Сладкий", tasteTag("Сладкий")),
-    InlineKeyboardButton.callbackData("Кисло-сладкий", tasteTag("Кисло-сладкий"))
+    InlineKeyboardButton.callbackData("\uD83C\uDF4BКислый", tasteTag("Кислый")),
+    InlineKeyboardButton.callbackData("\uD83C\uDF6DСладкий", tasteTag("Сладкий")),
+    InlineKeyboardButton.callbackData("\uD83C\uDF4EКисло-сладкий", tasteTag("Кисло-сладкий"))
   ))
 
   // buttons with power of hookah
   val powerMarkup: InlineKeyboardMarkup = InlineKeyboardMarkup.singleColumn(Seq(
-    InlineKeyboardButton.callbackData("Слабый", powerTag("Слабый")),
-    InlineKeyboardButton.callbackData("Средний", powerTag("Средний")),
-    InlineKeyboardButton.callbackData("Сильный", powerTag("Сильный")),
-    InlineKeyboardButton.callbackData("Назад", powerTag("back"))
+    InlineKeyboardButton.callbackData("\uD83D\uDD25", powerTag("Слабый")),
+    InlineKeyboardButton.callbackData("\uD83D\uDD25 \uD83D\uDD25", powerTag("Средний")),
+    InlineKeyboardButton.callbackData("\uD83D\uDD25 \uD83D\uDD25 \uD83D\uDD25", powerTag("Сильный")),
+    InlineKeyboardButton.callbackData("⬅️Назад", powerTag("back"))
   ))
 
   // optional comment button
   val commentMarkup = InlineKeyboardMarkup.singleColumn(Seq(
-    InlineKeyboardButton.callbackData("Добавить комментарий", commentTag("add")),
+    InlineKeyboardButton.callbackData("✉️Добавить комментарий", commentTag("add")),
     InlineKeyboardButton.callbackData("Нет, спасибо", commentTag("not_need")),
-    InlineKeyboardButton.callbackData("Назад", commentTag("back"))
+    InlineKeyboardButton.callbackData("⬅️Назад", commentTag("back"))
   ))
 
   val whenMarkup = InlineKeyboardMarkup.singleColumn(Seq(
-    InlineKeyboardButton.callbackData("15 минут", whenTag("15")),
-    InlineKeyboardButton.callbackData("30 минут", whenTag("30")),
-    InlineKeyboardButton.callbackData("45 минут", whenTag("45")),
-    InlineKeyboardButton.callbackData("Один час", whenTag("60")),
-    InlineKeyboardButton.callbackData("Назад", whenTag("back"))
+    InlineKeyboardButton.callbackData("\uD83D\uDD5215 минут", whenTag("15")),
+    InlineKeyboardButton.callbackData("\uD83D\uDD5530 минут", whenTag("30")),
+    InlineKeyboardButton.callbackData("\uD83D\uDD5845 минут", whenTag("45")),
+    InlineKeyboardButton.callbackData("\uD83D\uDD5BОдин час", whenTag("60")),
+    InlineKeyboardButton.callbackData("⬅️Назад", whenTag("back"))
   ))
 
   // finishing an order
   val finishMarkup = InlineKeyboardMarkup.singleRow(Seq(
-    InlineKeyboardButton.callbackData("Отправить", finishTag("accept")),
-    InlineKeyboardButton.callbackData("Отменить", finishTag("deny"))))
+    InlineKeyboardButton.callbackData("✅Отправить", finishTag("accept")),
+    InlineKeyboardButton.callbackData("\uD83D\uDEABОтменить", finishTag("deny"))))
 
 
   def starsMarkup(hookahId: Long) = InlineKeyboardMarkup.singleRow(Seq(
-    InlineKeyboardButton.callbackData("1", starsTag("1"+hookahId.toString)),
-    InlineKeyboardButton.callbackData("2", starsTag("2"+hookahId.toString)),
-    InlineKeyboardButton.callbackData("3", starsTag("3"+hookahId.toString)),
-    InlineKeyboardButton.callbackData("4", starsTag("4"+hookahId.toString)),
-    InlineKeyboardButton.callbackData("5", starsTag("5"+hookahId.toString))
+    InlineKeyboardButton.callbackData("1", starsTag("1" + hookahId.toString)),
+    InlineKeyboardButton.callbackData("2", starsTag("2" + hookahId.toString)),
+    InlineKeyboardButton.callbackData("3", starsTag("3" + hookahId.toString)),
+    InlineKeyboardButton.callbackData("4", starsTag("4" + hookahId.toString)),
+    InlineKeyboardButton.callbackData("5", starsTag("5" + hookahId.toString))
   ))
 
   def orderMessage(order: Order, guest: Guest): String =
-  "Заказ от: " + guest.firstName + " " + guest.lastName.getOrElse("") + " (" + guest.nickname.map("@" + _).getOrElse("без никнейма") + ")\n" +
-  "Время прибытия (примерно): " + order.time.toString + "\n" +
-  order.hookahTaste.getOrElse("") + ", " + order.hookahPower.getOrElse("") + "\n" +
-  "Дополнительный комментарий: " + order.comment.getOrElse("Нет\n")
+    "Заказ *#" + order.id + "* от: *" + guest.firstName + " " + guest.lastName.getOrElse("") + "* (" + guest.nickname.map("@" + _).getOrElse("без никнейма") + ")\n" +
+      "_Время прибытия (примерно):_ " + dateFormatter(order.time) + "\n" +
+      "_Вкус: " + order.hookahTaste.getOrElse("") +"_\n" +
+      "_Сила: " + order.hookahPower.getOrElse("") + "_\n" +
+      "_Дополнительный комментарий: _" + order.comment.getOrElse("Нет\n")
 
   onCallbackWithTag(order) { implicit cbq =>
     cbq.message.foreach { implicit msg =>
       request(EditMessageText(Some(msg.source), Some(msg.messageId),
-      text = "Кальянная: " + cbq.data.getOrElse("").split(" ").tail.mkString(" "),
+        text = "Кальянная: " + cbq.data.getOrElse("").split(" ").tail.mkString(" "),
         replyMarkup = None))
       userActor(msg.source, Some(cbq.from)) ! StartOrdering(cbq.data.getOrElse("").split(" ").head.toLong)
     }
   }
 
+  onCallbackWithTag(receiveOrder) { implicit cbq => //"receive:1:accept" -- cbq.data == Some(1:accept)
+    cbq.message.foreach { msg =>
+      cbq.data foreach { data =>
+        data.split(":")(1) match {
+          case "accept" =>
+            employeeDbActor ! AcceptOrder(msg.source, data.split(":").head.toLong)
+            request(EditMessageText(Some(msg.source), Some(msg.messageId),
+              text = "Заказ *#" + data.split(":").head + "* был принят.",
+              replyMarkup = None,
+              parseMode = Some(ParseMode.Markdown)))
+          case "deny" =>
+            request(EditMessageText(Some(msg.source), Some(msg.messageId),
+              text = "Заказ *#" + data.split(":").head + "* был отменен",
+              replyMarkup = None,
+              parseMode = Some(ParseMode.Markdown)))
+
+        }
+      }
+    }
+  }
+
   def startOrdering(userId: Long) = {
     request(SendMessage(userId,
-      text = "Теперь вы можете составить заказ (или, в случае чего, отменить его с помощью комманды /cancel)" +
-        "\nВкус кальяна:", replyMarkup = Some(tasteMarkup)))
+      text = "_Давай составим заказ_" +
+        "\n*Вкус кальяна*:", replyMarkup = Some(tasteMarkup), parseMode = Some(ParseMode.Markdown)))
   }
 
   // after pressing on the taste button:
   onCallbackWithTag(taste) { implicit cbq =>
     cbq.message.foreach { implicit msg =>
-      context.child(msg.source.toString) foreach { _ ! UpdateTaste(cbq.data) }
+      context.child(msg.source.toString) foreach {
+        _ ! UpdateTaste(cbq.data)
+      }
       request(EditMessageText(
         Some(msg.chat.id),
         Some(msg.messageId),
         text = msg.text.getOrElse("") + " " + cbq.data.getOrElse("") +
-          "\nЖёсткость:", replyMarkup = Some(powerMarkup)))
+          "\nЖёсткость:", replyMarkup = Some(powerMarkup), parseMode = Some(ParseMode.Markdown)))
     }
   }
 
@@ -166,15 +213,20 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
         request(EditMessageText(
           Some(msg.chat.id), Some(msg.messageId),
           text = msg.text.getOrElse("").split('\n').dropRight(2).mkString("\n") + "\nВкус кальяна:",
-          replyMarkup = Some(tasteMarkup)
+          replyMarkup = Some(tasteMarkup),
+          parseMode = Some(ParseMode.Markdown)
         ))
       else {
-        context.child(msg.source.toString) foreach { _ ! UpdatePower(cbq.data) }
+        context.child(msg.source.toString) foreach {
+          _ ! UpdatePower(cbq.data)
+        }
         request(EditMessageText(
           Some(msg.chat.id),
           Some(msg.messageId),
           text = msg.text.getOrElse("") + " " + cbq.data.getOrElse("") +
-            "\nПриблизительное время прибытия:", replyMarkup = Some(whenMarkup)))
+            "\nПриблизительное время прибытия:",
+          replyMarkup = Some(whenMarkup),
+          parseMode = Some(ParseMode.Markdown)))
       }
     }
   }
@@ -185,15 +237,20 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
         request(EditMessageText(
           Some(msg.chat.id), Some(msg.messageId),
           text = msg.text.getOrElse("").split("\n").dropRight(2).mkString("\n") + "\nЖёсткость:",
-          replyMarkup = Some(powerMarkup)
+          replyMarkup = Some(powerMarkup),
+          parseMode = Some(ParseMode.Markdown)
         ))
       else {
-        context.child(msg.source.toString) foreach { _ ! UpdateWhen(cbq.data) }
+        context.child(msg.source.toString) foreach {
+          _ ! UpdateWhen(cbq.data)
+        }
         request(EditMessageText(
           Some(msg.chat.id),
           Some(msg.messageId),
           text = msg.text.getOrElse("") + " через " + cbq.data.getOrElse("") + " минут" +
-            "\nДополнительный комментарий для кальянщика(по желанию)", replyMarkup = Some(commentMarkup)))
+            "\nДополнительный комментарий для кальянщика(по желанию)",
+          replyMarkup = Some(commentMarkup),
+          parseMode = Some(ParseMode.Markdown)))
       }
     }
   }
@@ -202,11 +259,12 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
   onCallbackWithTag(comment) { implicit cbq =>
     cbq.data match {
       case Some("back") =>
-        cbq.message.foreach{ implicit msg =>
+        cbq.message.foreach { implicit msg =>
           request(EditMessageText(
             Some(msg.chat.id), Some(msg.messageId),
             text = msg.text.getOrElse("").split("\n").dropRight(2).mkString("\n") + "\nПриблизительное время прибытия:",
-            replyMarkup = Some(whenMarkup)
+            replyMarkup = Some(whenMarkup),
+            parseMode = Some(ParseMode.Markdown)
           ))
         }
       case Some("add") =>
@@ -221,7 +279,8 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
             text = msg.text.getOrElse("") + ": без комментариев",
             replyMarkup = None))
           reply("Завершите заказ, или отмените, если что-то не так:",
-            replyMarkup = Some(finishMarkup))
+            replyMarkup = Some(finishMarkup),
+            parseMode = Some(ParseMode.Markdown))
         }
     }
   }
@@ -231,12 +290,17 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
       case Some("accept") =>
         cbq.message.foreach { msg =>
           request(EditMessageText(Some(msg.chat.id), Some(msg.messageId),
-            text = "Супер! Ваш заказ был отправлен кальянщику. Ожидайте сообщения..."))
-          context.child(msg.source.toString) foreach { _ ! FinishOrdering(msg.date) }
+            text = "Супер! Ваш заказ был отправлен кальянщику. Ожидайте сообщения...",
+            parseMode = Some(ParseMode.Markdown)))
+          context.child(msg.source.toString) foreach {
+            _ ! FinishOrdering(msg.date)
+          }
         }
       case Some("deny") =>
         cbq.message.foreach { msg =>
-          context.child(msg.source.toString) foreach { _ ! CancelOrdering }
+          context.child(msg.source.toString) foreach {
+            _ ! CancelOrdering
+          }
           request(DeleteMessage(msg.chat.id, msg.messageId))
         }
     }
@@ -246,15 +310,20 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
     cbq.message.foreach { msg =>
       request(EditMessageText(Some(msg.source), Some(msg.messageId),
         text = "", replyMarkup = userMarkup))
+      request(EditMessageText(Some(msg.source), Some(msg.messageId),
+        text = msg.text.getOrElse(""),
+        replyMarkup = userMarkup))
       request(DeleteMessage(msg.source, msg.messageId))
-      ackCallback(Some("Спасибо за визит!!!"))
-      cbq.data.foreach{ d =>
+      ackCallback(Some("Оценка отправлена"))
+      request(SendMessage(msg.source, "Спасибо за визит!",
+        replyMarkup = userMarkup))
+      cbq.data.foreach { d =>
         promocodeDbActor ! NewVisit(msg.source, d.tail.toLong, msg.date, d.head.toString.toInt)
       }
     }
   }
 
-  /* MESSAGE HANDLER */
+  /** MESSAGE HANDLER **/
 
   onCommand("/login") {
     implicit msg =>
@@ -273,19 +342,33 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
     employeeDbActor ! GetPromocode(msg.source)
   }
 
+  onCommand ("/add") {
+    implicit msg =>
+      val admin = msg.from.getOrElse(User(0,isBot = false,"")).id
+    if (admin == 364139836 || admin == 296974237)
+      reply ("Введите название кальянной", replyMarkup = Some(ForceReply()))
+    else reply ("У вас нет прав")
+  }
+
   onCommand("/cancel") { implicit msg =>
 
   }
 
   onMessage { implicit msg =>
     using(_.text) {
-      case "Заказать кальян" =>
-        msg.from.foreach { _ => orderDbActor ! CheckHookahs(msg.source) }
-      case "Ввести промокод" =>
+      case "Заказать кальян\uD83C\uDF2A" =>
+        if (context.child(msg.source.toString).nonEmpty)
+          reply("Пока что вы не можете заказать кальян.")
+        else
+        orderDbActor ! CheckHookahs(msg.source)
+      case "Ввести промокод\uD83D\uDD20" =>
         reply("Введите промокод, который сказал вам кальянщик", replyMarkup = Some(ForceReply()))
+      case "Посмотреть статистику\uD83D\uDCC8" =>
+        promocodeDbActor ! GetStats(msg.source)
       case _ =>
         "Извините, не понимаю Вас"
     }
+
     using(_.replyToMessage) {
       rpl =>
         rpl.text match {
@@ -299,6 +382,16 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
           case Some("Введите пароль, чтобы авторизироваться") => msg.from.foreach { _ =>
             manager ! Login(msg, msg.text.getOrElse(""))
           }
+
+          case Some ("Введите название кальянной") =>
+            promocodeDbActor ! NewHookahName (msg.text.getOrElse(""))
+            reply ("Теперь введите пароль в кальянной",replyMarkup = Some(ForceReply()))
+          case Some ("Теперь введите пароль в кальянной") =>
+            promocodeDbActor ! NewHookahPassword (msg.text.get)
+            reply ("Если хотите, введите номер кальяна, который будет акционным",replyMarkup = Some(ForceReply()))
+          case Some ("Если хотите, введите номер кальяна, который будет акционным") =>
+            promocodeDbActor ! NewHookahAction (Option(msg.text.getOrElse("0").toInt), msg.from.get.id)
+
           case _ => reply("Извините, не понимаю вас")
         }
     }
@@ -307,15 +400,13 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
   override def preStart(): Unit = {
     run()
   }
-
-  /* RECEIVE MESSAGES FROM OTHER ACTORS */
+  /** RECEIVE MESSAGES FROM OTHER ACTORS **/
 
   override def receive: Receive = {
     // from UserActor after starting ordering when previous order isn't completed, or other
     case DenyOrdering(userId, because) =>
       request(SendMessage(userId, text = "Извините, не могу принять ваш заказ, потому что" + because))
-      context.child(userId.toString) foreach { user =>
-        user ! CancelOrdering }
+      context.child(userId.toString) foreach { _ ! PoisonPill }
     // from UserActor when it can start making order
     case AcceptOrdering(userId) =>
       startOrdering(userId)
@@ -330,36 +421,59 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
           set.map(s => InlineKeyboardButton.callbackData(s._2, orderTag(s._1.toString + " " + s._2))).toSeq))))
     case OrderCancelled(userId) =>
       request(SendMessage(userId, "Ваш заказ был успешно отменен."))
+      context.child(userId.toString).foreach{ _ ! PoisonPill }
     case OrderNotCancelled(userId) =>
       request(SendMessage(userId, "Не могу отменить ваш заказ."))
     case SendOrderToEmployees(userOrder, emplSet, guest) =>
       emplSet foreach { id =>
-        request(SendMessage(id, orderMessage(userOrder, guest), replyMarkup = hookahMarkup))
+        request(SendMessage(id, orderMessage(userOrder, guest),
+          replyMarkup = receiveOrderMarkup(userOrder.id),
+          parseMode = Some(ParseMode.Markdown)))
       }
-    //    case SendOrderMessage(msg) =>
-    //      reply("Вам пришел заказ ... от ... ",
-    //        replyMarkup = Some(InlineKeyboardMarkup.singleColumn(Seq(
-    //          InlineKeyboardButton.callbackData()
-    //        ))))
-
+    case OrderTimeout(userOrder) =>
+      request(SendMessage(userOrder.guestId, "Ответа от кальянщиков не было на протяжении 10 минут, поэтому заказ #" +
+        userOrder.id.toString + " был отменен. Приношу извинения за неудобства"))
+      context.child(userOrder.guestId.toString) foreach { _ ! PoisonPill }
+    case OrderWasAccepted(userId, userOrder) =>
+      request(SendMessage(userId, "Ваш заказ (#" + userOrder.id.toString + ") был принят! Ожидаем вас в " + dateFormatter(userOrder.time)))
+      context.child(userId.toString) foreach { context.system.scheduler.scheduleOnce(60 minutes, _, PoisonPill) }
     case CantLogin(chatId, because) =>
-      request(SendMessage(chatId, "Не могу войти, потому что" + because))
+      request(SendMessage(chatId, "\uD83D\uDD34Не могу войти, потому что" + because))
     case IsLogined(chatId) =>
-      request(SendMessage(chatId, "Вы успешно вошли в систему"))
+      request(SendMessage(chatId, "\uD83D\uDD34Вы успешно вошли в систему"))
     case IsLogout(chatId) =>
-      request(SendMessage(chatId, "Вы успешно вышли из системы",
+      request(SendMessage(chatId, "\uD83D\uDD34Вы успешно вышли из системы",
         replyMarkup = userMarkup))
     case NotLogout(chatId, because) =>
-      request(SendMessage(chatId, "Вы не вышли из системы, потому что" + because))
+      request(SendMessage(chatId, "\uD83D\uDD34Вы не вышли из системы, потому что" + because))
     case AcceptPromocode(chatId, promocode) =>
-      request(SendMessage(chatId, "Промокод: " + promocode.getOrElse("")))
+      request(SendMessage(chatId, "\uD83D\uDD34Промокод: " + promocode))
     case DenyPromocode(chatId) =>
-      request(SendMessage(chatId, "У вас нет прав"))
+      request(SendMessage(chatId, "\uD83D\uDD34У вас нет прав"))
     case RightPromocode(chatId, hookahId) =>
       request(SendMessage(chatId, "Вы успешно ввели промокод!\nПоставьте оценку заведению:",
         replyMarkup = Some(starsMarkup(hookahId))))
     case WrongPromocode(chatId) =>
-      request(SendMessage(chatId, "Неправильный промокод!"))
+      request(SendMessage(chatId, "‼️Неправильный промокод!", replyMarkup = userMarkup))
+    case OrderAlreadyAccepted(accId, orderId) =>
+      request(SendMessage(accId, "\uD83D\uDD34\uD83D\uDD34\uD83D\uDD34" +
+        "\nЗаказ #" + orderId.toString + " уже принят другим кальянщиком, его делать не нужно."))
+    case UserStats(userId, statsSet) =>
+      if(statsSet.isEmpty) request(SendMessage(userId, "К сожалению, вы еще не пользовались услугами нашего бота."))
+      else
+        request(SendMessage(userId,
+        "\uD83D\uDCC8*Статистика*\n\n" + statsSet.map{ value =>
+          val count = value._2._2
+          val isFree = count % value._2._3 == 0
+          "_Кальянная:_ " + value._1 + "\n" +
+          "_Средняя оценка:_ " + value._2._1.toString +"\n" +
+          "_Всего посещений:_ " + count + "\n" +
+          { if (isFree) "\uD83D\uDD34*У вас бесплатный кальян!*\n" else "" } +
+          "_Осталось кальянов до бесплатного:_ " + (value._2._3 - (count % value._2._3)).toString + "\n"
+        }.mkString("\n"),
+          parseMode = Some(ParseMode.Markdown)))
+    case NewHookahSuccess (chatId) =>
+      request (SendMessage(chatId, "Новая кальянная успешно добавлена"))
     case _ => Unit
   }
 }
@@ -380,6 +494,10 @@ case class OrderNotCancelled(userId: Long)
 
 case class SendOrderToEmployees(order: Order, emplSet: Set[Long], guest: Guest)
 
+case class OrderWasAccepted(userId: Long, order: Order)
+
+case class OrderTimeout(order: Order)
+
 // Login
 
 case class IsLogined(chatId: Long)
@@ -392,13 +510,19 @@ case class NotLogout(chatId: Long, because: String)
 
 // Promocode
 
-case class AcceptPromocode(chatId: Long, promocode: Option[String])
+case class AcceptPromocode(chatId: Long, promocode: String)
 
 case class DenyPromocode(chatId: Long)
 
 case class RightPromocode(chatId: Long, hookahId: Long)
 
 case class WrongPromocode(chatId: Long)
+
+case class OrderAlreadyAccepted(accId: Long, orderId: Long)
+
+case class UserStats(userId: Long, statsSet: Set[(String, (Double, Int, Int))])
+
+case class NewHookahSuccess (chatId : Long)
 
 object HookahBotActor {
   def props(): Props = Props(new HookahBotActor())

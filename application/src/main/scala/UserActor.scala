@@ -1,9 +1,8 @@
 import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
 
-import akka.actor.{Actor, ActorRef, ActorSelection, Props}
+import akka.actor.{Actor, ActorSelection, Props}
 import model._
-import com.bot4s.telegram.models.{Message, User}
 
 class UserActor(user: Guest) extends Actor {
   var isFree = true
@@ -16,30 +15,21 @@ class UserActor(user: Guest) extends Actor {
   val emptyOrder = Order(user.id, 0, None, None, LocalDateTime.MIN, None)
 
   val manager: ActorSelection = context.actorSelection("/user/hookah-bot-actor/manager-actor")
-
-  def finishOrdering() = {
-    isFree = true
-  }
+  val orderDbActor = context.actorSelection("/user/hookah-bot-actor/order-database-actor")
 
   def epochToLocalDateTimeConverter(epoch: Int): LocalDateTime =
-    LocalDateTime.ofInstant(Instant.ofEpochSecond(epoch), TimeZone.getDefault.toZoneId)
+    LocalDateTime.ofInstant(Instant.ofEpochSecond(epoch), TimeZone.getDefault.toZoneId).plusHours(3)
 
   def receive: Receive = {
     case StartOrdering(id) =>
       if (isFree) {
         isFree = false
         hookahId = id
-        //          Some(Order(
-        //            msg.from.map(_.id).getOrElse(0).toLong,
-        //            hookahId,
-        //            None,
-        //            None,
-        //            LocalDateTime.ofInstant(Instant.ofEpochSecond(msg.date), TimeZone.getDefault.toZoneId)))
         context.parent ! AcceptOrdering(user.id)
       }
       else
         context.parent ! DenyOrdering(user.id, " предыдущий заказ не ещё не обработан. " +
-          "Подождите, пока обработается предыдущий заказ, или отмените его с помощью /cancel")
+          "Подождите, пока обработается предыдущий заказ.")
     case UpdateTaste(newTaste) =>
       hookahTaste = newTaste
     case UpdatePower(newPower) =>
@@ -49,18 +39,10 @@ class UserActor(user: Guest) extends Actor {
     case UpdateComment(newComment) =>
       optComment = newComment
     case FinishOrdering(time: Int) =>
-//      println(user.nickname.getOrElse(""))
-//      println(msg.from.map(_.username).getOrElse(""))
-//      if(hookahTaste.isEmpty || hookahPower.isEmpty || when.isEmpty)
-//        context.parent ! DenyOrdering(msg, "вы не указали какой-то из пунктов. " +
-//          "Пересмотрите свой заказ, пожалуйста.")
-//      else {
         val orderTime = epochToLocalDateTimeConverter(time)
           .plusMinutes(when.getOrElse("").toLong)
         val order = Order(user.id, hookahId, hookahTaste, hookahPower, orderTime, comment = optComment)
-      println(user.nickname)
-        manager ! DirectOrder(order, user)
-//      }
+        orderDbActor ! CreateOrder(user, order)
     case CancelOrdering =>
       if(!isFree) {
         isFree = true
