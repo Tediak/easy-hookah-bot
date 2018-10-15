@@ -40,18 +40,26 @@ class HookahRepository(db: Database) {
       hookah <- hookahTable if hookah.password === pass
     } yield hookah).result).map(_.toSet)
 
-  def getHookahsforUser(id: Long)(implicit ec: ExecutionContext): Future[Set[(Long, String)]] =
+  def getHookahsforUser(id: Long)(implicit ec: ExecutionContext): Future[Set[(Long, String, Double)]] =
     db.run((for {
       visit <- VisitTable.table if visit.guestId === id
       hookah <- hookahTable if hookah.id === visit.hookahId
     } yield (hookah, visit.stars)).result).map(
       _.groupBy(_._1)
         .mapValues { value =>
-          val sum = value.map(_._2).sum
-          val avg = sum.toDouble / value.length
-          sum.toDouble / value.length
+          value.map(_._2).sum.toDouble / value.length
         }
         .toVector.sortBy(_._2)
-        .map(v => (v._1.id, v._1.name))
+        .map(v => (v._1.id, v._1.name, v._2))
         .toSet)
+
+  def checkPromocode(code: String)(implicit ec: ExecutionContext): Future[Option[Hookah]] =
+    db.run((for{
+      hookah <- hookahTable if hookah.code === code
+    } yield hookah).result.headOption)
+
+  def getPromocode(id: Long)(implicit ec: ExecutionContext): Future[String] =
+    db.run((for {
+      hookah <- hookahTable if hookah.id === id
+    } yield hookah.code).result.headOption).map(_.getOrElse(""))
 }

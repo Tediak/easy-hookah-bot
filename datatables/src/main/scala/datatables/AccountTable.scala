@@ -1,6 +1,6 @@
 package datatables
 
-import model.Account
+import model.{Account, Hookah}
 import slick.jdbc.PostgresProfile.api._
 import slick.lifted.Tag
 
@@ -38,6 +38,11 @@ class AccountRepository(db: Database) {
 
   def getAllEmployees(hookahId: Long)(implicit ec: ExecutionContext): Future[Set[Long]] =
     db.run(accountTable.filter(_.hookahId === hookahId).map(_.id).result).map(_.toSet)
+
+  def checkPassword(pass: String)(implicit ec: ExecutionContext): Future[Option[Hookah]] =
+    db.run((for{
+      hookah <- HookahTable.table if hookah.password === pass
+    } yield hookah).result).map(_.headOption)
 
 //  def updateByUser(login : String, isAuthorized : Boolean) =
 //    db.run(accountTable.filter(x=> x.login === login).map(x=> x.isLogined).update(isAuthorized))

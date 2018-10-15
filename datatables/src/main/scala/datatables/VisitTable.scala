@@ -40,7 +40,7 @@ class VisitRepository(db: Database) {
   def getById(visitId: Long): Future[Option[Visit]] =
     db.run(visitTable.filter(_.id === visitId).result.headOption)
 
-  def getUserStats(userId: Long)(implicit ec: ExecutionContext) =
+  def getUserStats(userId: Long)(implicit ec: ExecutionContext): Future[Set[(String, (Double, Int, Int))]] =
     db.run((for{
       visit <- visitTable if visit.guestId === userId
       hookah <- HookahTable.table if hookah.id === visit.hookahId

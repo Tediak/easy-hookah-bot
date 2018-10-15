@@ -2,34 +2,39 @@ import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
 
 import akka.actor.{Actor, ActorSelection, Props}
+import datatables._
+import slick.jdbc.PostgresProfile.api._
 import model._
+import scala.concurrent.ExecutionContext
+import scala.util.{Failure, Success}
+import scala.concurrent.duration._
+
 
 class UserActor(user: Guest) extends Actor {
-  var isFree = true
   var hookahId = 0L
   var hookahTaste: Option[String] = None
   var hookahPower: Option[String] = None
   var when: Option[String] = None
   var optComment: Option[String] = None
 
-  val emptyOrder = Order(user.id, 0, None, None, LocalDateTime.MIN, None)
+  val db = Database.forConfig("postgres")
 
-  val manager: ActorSelection = context.actorSelection("/user/hookah-bot-actor/manager-actor")
-  val orderDbActor = context.actorSelection("/user/hookah-bot-actor/order-database-actor")
+  val hookahRepository = new HookahRepository(db)
+  val accountRepository = new AccountRepository(db)
+  val orderRepository = new OrderRepository(db)
+  val visitRepository = new VisitRepository(db)
+  val guestRepository = new GuestRepository(db)
+
+  implicit val ec: ExecutionContext = ExecutionContext.global
+
+  val emptyOrder = Order(user.id, 0, None, None, LocalDateTime.MIN, None)
 
   def epochToLocalDateTimeConverter(epoch: Int): LocalDateTime =
     LocalDateTime.ofInstant(Instant.ofEpochSecond(epoch), TimeZone.getDefault.toZoneId).plusHours(3)
 
   def receive: Receive = {
     case StartOrdering(id) =>
-      if (isFree) {
-        isFree = false
         hookahId = id
-        context.parent ! AcceptOrdering(user.id)
-      }
-      else
-        context.parent ! DenyOrdering(user.id, " предыдущий заказ не ещё не обработан. " +
-          "Подождите, пока обработается предыдущий заказ.")
     case UpdateTaste(newTaste) =>
       hookahTaste = newTaste
     case UpdatePower(newPower) =>
@@ -42,17 +47,11 @@ class UserActor(user: Guest) extends Actor {
         val orderTime = epochToLocalDateTimeConverter(time)
           .plusMinutes(when.getOrElse("").toLong)
         val order = Order(user.id, hookahId, hookahTaste, hookahPower, orderTime, comment = optComment)
-        orderDbActor ! CreateOrder(user, order)
-    case CancelOrdering =>
-      if(!isFree) {
-        isFree = true
-        hookahId = 0L
-        hookahTaste = None
-        hookahPower = None
-        when = None
-        context.parent ! OrderCancelled(user.id)
-      }
-      else context.parent ! OrderNotCancelled(user.id)
+        orderRepository.create(order).onComplete {
+          case Success(o) =>
+            context.parent ! SendOrderToEmployees(o)
+            context.system.scheduler.scheduleOnce(10 minutes, context.parent, OrderTimeout(o.id))
+        }
     case _ =>
       Unit
   }
@@ -69,10 +68,6 @@ case class UpdateWhen(when: Option[String])
 case class UpdateComment(comment: Option[String])
 
 case class FinishOrdering(time: Int)
-
-case object CancelOrdering
-
-case class OrderCreated(id: Long)
 
 object UserActor {
   def props(guest: Guest) = Props(new UserActor(guest))
