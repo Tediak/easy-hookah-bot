@@ -63,7 +63,6 @@ class UserActor(user: Guest) extends Actor {
             context.parent ! SendOrderToEmployees(orders)
         }
       }
-//        orderRepository.create(order)
     case _ =>
       Unit
   }

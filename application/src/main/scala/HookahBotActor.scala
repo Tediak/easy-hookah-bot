@@ -547,6 +547,17 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
                   parseMode = Some(ParseMode.Markdown),
                   replyMarkup = userMarkup)
             }
+          case "adv" :: msg =>
+            db.run(guestRepository.guestTable.map(_.id).result).foreach { set =>
+              set.foreach { id =>
+                val adv = msg.mkString(" ")
+                println(adv)
+                request(SendMessage(
+                  id,
+                  text = adv
+                ))
+              }
+            }
 
         }
       }
@@ -700,9 +711,7 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
               replyMarkup = userMarkup,
               parseMode = Some(ParseMode.Markdown)
             ))
-            context.child(orders.head.guestId.toString).foreach {
-              _ ! PoisonPill
-            }
+            context.child(orders.head.guestId.toString).foreach { _ ! PoisonPill }
           }
           else {
             val userId = orders.head.guestId
@@ -733,9 +742,7 @@ class HookahBotActor() extends TelegramBot with Polling with Commands
                   "заказ *#" + o.id.toString + "* был отменен." +
                   "Приношу извинения за неудобства, надеюсь, такого больше не повторится!",
                 parseMode = Some(ParseMode.Markdown)))
-              context.child(o.guestId.toString) foreach {
-                _ ! PoisonPill
-              }
+              context.child(o.guestId.toString) foreach { _ ! PoisonPill }
             }
           }
       }
