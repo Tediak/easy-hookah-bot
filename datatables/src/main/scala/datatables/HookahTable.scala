@@ -62,4 +62,11 @@ class HookahRepository(db: Database) {
     db.run((for {
       hookah <- hookahTable if hookah.id === id
     } yield hookah.code).result.headOption).map(_.getOrElse(""))
+
+  def addNew(name: String, password: String, free: Int)(implicit ec: ExecutionContext): Future[(String, Long)] =
+    create(Hookah(name, "", password, free)).map(_.id) map { id =>
+      val code = "0" * (3 - id.toString.length) + id.toString
+      update(Hookah(name, code, password, free, id).updatePromocode)
+      (name, id)
+    }
 }

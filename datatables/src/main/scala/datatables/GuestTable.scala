@@ -4,7 +4,7 @@ import model.Guest
 import slick.jdbc.PostgresProfile.api._
 import slick.lifted.Tag
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 class GuestTable(tag: Tag) extends Table[Guest](tag, "guests"){
   val id = column[Long]("id", O.PrimaryKey)
@@ -33,4 +33,13 @@ class GuestRepository(db: Database) {
 
   def getById(guestId: Long): Future[Option[Guest]] =
     db.run(guestTable.filter(_.id === guestId).result.headOption)
+
+  def createOrUpdate(guest: Guest)(implicit ec: ExecutionContext): Unit =
+    db.run(guestTable.filter(_.id === guest.id).result.headOption)
+    .foreach {
+      case Some(g) =>
+        update(guest)
+      case None =>
+        create(guest)
+    }
 }
